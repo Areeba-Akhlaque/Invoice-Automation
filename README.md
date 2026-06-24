@@ -53,11 +53,18 @@ python check_setup.py                           # verify Kimai + Google + roster
 
 ## Setup — Cloud (GitHub Actions, no laptop)
 1. **Push this repo to GitHub** (secrets are gitignored — safe).
-2. **Create a Google service account** (Google Cloud Console → IAM → Service Accounts), download its JSON key, and **share the spreadsheet with the service-account email as Editor**. (Headless, never expires — unlike OAuth.)
-3. In the repo: **Settings → Secrets and variables → Actions → New repository secret**, add:
+2. In the repo: **Settings → Secrets and variables → Actions → New repository secret**, add:
    - `KIMAI_URL`, `KIMAI_TOKEN`, `GEMINI_API_KEY`
-   - `GOOGLE_SERVICE_ACCOUNT_JSON` — paste the whole service-account JSON
-4. Done. `.github/workflows/invoice.yml` runs on the **7th & 22nd** (06:00 UTC — adjust in the file), or trigger manually from the **Actions** tab (with an optional “write” toggle).
+   - `GOOGLE_TOKEN_JSON` — paste the entire contents of your local `token.json` (it
+     holds the OAuth refresh token; the workflow restores it and refreshes headlessly).
+3. Done. `.github/workflows/invoice.yml` runs on the **7th & 22nd at 9am PST** (17:00 UTC),
+   or trigger manually from the **Actions** tab (with an optional “write” toggle).
+
+> **OAuth longevity:** for the refresh token to keep working long-term, set the
+> OAuth consent screen to **Publishing status: In production** (Google Cloud Console
+> → APIs & Services → OAuth consent screen → Publish App). "Testing" refresh tokens
+> expire after 7 days. (A service account avoids this entirely — supported via
+> `GOOGLE_SERVICE_ACCOUNT_JSON` if you ever want it.)
 
 ## Notes
 - Gemini uses **one batched call** per run (well within the free daily quota).

@@ -1,13 +1,12 @@
 name: DRC Invoice
 
 # Cloud scheduling — runs on GitHub's servers, no laptop needed.
-# Cron is UTC. 06:00 UTC on the 7th and 22nd (a day before Cherry issues on 8th/23rd).
-# Adjust the times below for your timezone if needed.
+# Cron is UTC and does NOT observe DST. 17:00 UTC = 9:00 AM PST (winter).
+# (In summer / PDT that lands at 10:00 AM; change "17" to "16" if you prefer.)
 on:
   schedule:
-    - cron: "0 6 7 * *"    # 7th  -> bills 1-15
-    - cron: "0 6 22 * *"   # 22nd -> bills 16-EOM
-  workflow_dispatch:        # manual run button
+    - cron: "0 17 7,22 * *"   # 7th & 22nd of every month, 9am PST -> bills 1-15 / 16-EOM
+  workflow_dispatch:           # manual "Run workflow" button
     inputs:
       write:
         description: "Write the tab to the sheet (otherwise preview only)"
@@ -32,12 +31,14 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Restore Google OAuth token
+        run: printf '%s' '${{ secrets.GOOGLE_TOKEN_JSON }}' > token.json
+
       - name: Generate invoice
         env:
           KIMAI_URL: ${{ secrets.KIMAI_URL }}
           KIMAI_TOKEN: ${{ secrets.KIMAI_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
           ARGS="--yes"
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.write }}" = "true" ]; then

@@ -1,0 +1,18 @@
+# --- secrets (NEVER commit) ---
+.env
+token.json
+client_secret_*.json
+*service-account*.json
+*service_account*.json
+sa*.json
+
+# --- logs / local output ---
+*.log
+*.xlsx
+
+# --- python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+.python-version

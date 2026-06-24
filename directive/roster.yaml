@@ -1,0 +1,107 @@
+# DIRECTIVE — laborer roster & per-person billing rules. Derived from DRC-0059 + Cherry.
+#
+# Rate model is "mixed" (same as the sheet); the duplicate-template preserves each
+# row's rate formula, so rates aren't recomputed here. base_rate*markup is only
+# used for the dry-run preview.
+#   1.2 = 20% markup on cost (Cherry: applies to all contractors; older roster
+#   rates already have it baked in -> markup 1.0).
+#
+# hours_source:
+#   fixed   -> 86.5 (173/mo full-time contractor)
+#   kimai   -> hours pulled from Kimai (previous complete half-month, advance billing)
+#   manual  -> carried over from the previous invoice / set via --manual (James, Bradd, Keeko)
+#
+# kimai_user_id is used for BOTH hours (kimai source) and pulling timesheet
+# descriptions (all who track in Kimai). name MUST match column B of the invoice
+# tab (whitespace ignored when matching).
+
+laborers:
+  - name: "James Hereford"
+    base_rate: 200
+    markup: 1.0
+    hours_source: manual
+    kimai_user_id: 3         # "Jaime"
+
+  - name: "Roman Naidenko"
+    base_rate: 58
+    markup: 1.0
+    hours_source: fixed
+    kimai_user_id: 9
+
+  - name: "Victor Cheung"
+    base_rate: 52
+    markup: 1.0
+    hours_source: fixed
+    kimai_user_id: 7
+
+  - name: "Saymond Montoya"
+    base_rate: 16
+    markup: 1.0
+    hours_source: fixed
+    kimai_user_id: 12
+
+  - name: "Keeko Villaveces"
+    base_rate: 55
+    markup: 1.0
+    hours_source: manual     # Cherry's Kimai list excludes Keeko; billed manually
+    kimai_user_id: 10        # kept for description pulls if she tracks in Kimai
+
+  - name: "Muhammad Farhan"
+    base_rate: 36
+    markup: 1.0
+    hours_source: fixed
+    kimai_user_id: 30
+
+  - name: "Alexander Pavelko"
+    base_rate: 30
+    markup: 1.2
+    hours_source: kimai
+    kimai_user_id: 29        # alias "Alex"
+
+  - name: "Dana Hette"
+    base_rate: 120
+    markup: 1.2
+    hours_source: kimai
+    kimai_user_id: 35        # Kimai username "Dana Hettè"
+
+  - name: "JP Casabianca"
+    base_rate: 40.625
+    markup: 1.2
+    hours_source: fixed
+    kimai_user_id: 36        # "Juan Pablo"
+
+  - name: "Rafael Casabianca"
+    base_rate: 37.5
+    markup: 1.2
+    hours_source: fixed
+    kimai_user_id: 37
+
+  - name: "David Andres"
+    base_rate: 37.5
+    markup: 1.2
+    hours_source: fixed
+    kimai_user_id: 38
+
+  - name: "William Titus"
+    base_rate: 15
+    markup: 1.2
+    hours_source: fixed      # full-time -> 86.5 (not Kimai actuals); still tracks in Kimai for descriptions
+    kimai_user_id: 41
+
+  - name: "Clarissa"
+    base_rate: 30
+    markup: 1.2
+    hours_source: kimai
+    kimai_user_id: 39        # alias "Clarissa Mitidiero"
+
+  - name: "Prameeth"
+    base_rate: 25
+    markup: 1.2
+    hours_source: kimai
+    kimai_user_id: 42        # alias "Prameeth Kotian"
+
+  - name: "Bradd Schofield"
+    base_rate: 125
+    markup: 1.0
+    hours_source: manual
+    kimai_user_id: 4

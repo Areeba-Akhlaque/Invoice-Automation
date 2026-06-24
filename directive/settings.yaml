@@ -1,0 +1,52 @@
+# DIRECTIVE — global settings & policy for the invoice automation.
+# The "what": declarative configuration the Orchestration layer reads.
+
+google:
+  spreadsheet_id: "175sJ_48ScDzpFj_MnGeHoMsKaAQV4qbGiLHjEjrofuM"
+  # Local (interactive) OAuth fallback — used only when no service account is set.
+  client_secret_glob: "client_secret_*.json"
+  token_file: "token.json"
+  scopes:
+    - "https://www.googleapis.com/auth/spreadsheets"
+
+invoice:
+  client: "David Roberts Consulting"
+  prefix: "DRC"            # invoice tabs look like DRC-0059
+  number_pad: 4            # DRC-0059 -> 4 digits
+  due_days: 7              # DATE DUE = INVOICE DATE + 7
+  fixed_hours: 86.5        # the "=173/2" standard for full-time contractors
+
+# Advance-billing schedule (Cherry's model): bill 1-15 and 16-EOM, issued in
+# advance (issue = period start + 7). The automation runs the day before issue.
+schedule:
+  run_days: [7, 22]        # day-of-month the automation generates a draft
+  issue_offset_days: 7     # invoice issue date = period start + this
+
+gemini:
+  model: "gemini-2.5-flash-lite"   # free-tier model (higher daily quota than 2.5-flash)
+  request_delay_seconds: 8         # gap between calls when not batching
+
+# Cell layout of an invoice tab (matches DRC-0059). Line-item rows are located
+# dynamically by matching the person name in the person column, so only the
+# header/total cells are hard-coded here.
+layout:
+  invoice_number: "F5"
+  invoice_date: "F6"
+  start_date: "F8"
+  end_date: "F9"
+  project_description: "B13"
+  person_col: "B"
+  project_col: "C"
+  hours_col: "D"
+  rate_col: "E"
+  amount_col: "F"
+  line_items_scan_rows: [16, 36]   # rows to scan for person names
+  subtotal_cell: "F38"
+  discount_cell: "F39"
+  total_cell: "D41"                # TOTAL = F38-F39 lives in D41 (display/reference)
+
+# Pass-through / third-party rows (located by name match in person column).
+passthroughs:
+  - "Softstackers AWS Infrastructure"
+  - "Softstackers Team Support"
+  - "Google Cloud Platform"

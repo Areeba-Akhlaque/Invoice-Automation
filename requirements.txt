@@ -1,0 +1,6 @@
+requests>=2.31
+PyYAML>=6.0
+python-dotenv>=1.0
+google-api-python-client>=2.120
+google-auth>=2.29
+google-auth-oauthlib>=1.2

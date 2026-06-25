@@ -10,6 +10,10 @@ sa*.json
 *.log
 *.xlsx
 
+# --- excluded from repo (local-only / not needed for cloud run) ---
+.env.example
+run_invoice.bat
+
 # --- python ---
 __pycache__/
 *.pyc

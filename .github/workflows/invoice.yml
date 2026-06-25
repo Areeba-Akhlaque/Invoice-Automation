@@ -32,13 +32,14 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Restore Google OAuth token
-        run: printf '%s' '${{ secrets.GOOGLE_TOKEN_JSON }}' > token.json
+        run: printf '%s' '${{ secrets.GOOGLE_TOKEN_JSON || secrets.GOOGLE_TOKEN }}' > token.json
 
       - name: Generate invoice
         env:
-          KIMAI_URL: ${{ secrets.KIMAI_URL }}
-          KIMAI_TOKEN: ${{ secrets.KIMAI_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Accept a few common secret-name variations so naming doesn't break it.
+          KIMAI_URL: ${{ secrets.KIMAI_URL || secrets.KIMAI_API_URL }}
+          KIMAI_TOKEN: ${{ secrets.KIMAI_TOKEN || secrets.KIMAI_API_TOKEN || secrets.KIMAI_API }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.GEMINI_API }}
         run: |
           ARGS="--yes"
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.write }}" = "true" ]; then

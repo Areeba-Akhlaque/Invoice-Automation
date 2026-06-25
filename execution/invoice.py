@@ -92,6 +92,19 @@ def build_plan(
     template_tab, latest_num = latest_invoice_tab(titles, prefix)
     inv_no = next_invoice_number(latest_num, prefix, pad)
 
+    # If no cap given, carry over the PREVIOUS invoice's contract amount from its
+    # discount cell (e.g. "=(SUM(F17:F36)-59250)" -> 59250). The reviewer can edit
+    # the number in the formula bar; total defaults to the last agreed amount.
+    if cap is None:
+        try:
+            dcell = settings["layout"]["discount_cell"]
+            txt = str(sheets.get_values(f"'{template_tab}'!{dcell}", formulas=True)[0][0])
+            m = re.search(r"-\s*([0-9][0-9.]*)\s*\)?\s*$", txt.replace(",", ""))
+            if m:
+                cap = float(m.group(1))
+        except Exception:
+            pass
+
     kimai_by_id: dict[int, float] = {}
     kimai_by_name: dict[str, float] = {}
     for row in kimai_rows or []:
@@ -239,7 +252,8 @@ def write_plan(sheets, plan: InvoicePlan, tab_name: str | None = None) -> str:
 
     # Discount: cap -> discount = subtotal - cap; otherwise 0 (overwrites stale template cap).
     if plan.cap is not None:
-        updates.append((lay["discount_cell"], f"={lay['subtotal_cell']}-{plan.cap}"))
+        cap_str = f"{plan.cap:g}"  # 59250 (not 59250.0); keeps decimals if any
+        updates.append((lay["discount_cell"], f"={lay['subtotal_cell']}-{cap_str}"))
     else:
         updates.append((lay["discount_cell"], 0))
 

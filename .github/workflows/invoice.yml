@@ -18,6 +18,9 @@ on:
       end:
         description: "Period end YYYY-MM-DD (optional)"
         required: false
+      cap:
+        description: "Contract amount (final total). Discount = subtotal - this. Blank = no discount."
+        required: false
 
 jobs:
   build-invoice:
@@ -47,5 +50,6 @@ jobs:
           fi
           if [ -n "${{ inputs.start }}" ]; then ARGS="$ARGS --start ${{ inputs.start }}"; fi
           if [ -n "${{ inputs.end }}" ]; then ARGS="$ARGS --end ${{ inputs.end }}"; fi
+          if [ -n "${{ inputs.cap }}" ]; then ARGS="$ARGS --cap ${{ inputs.cap }}"; fi
           echo "Running: python run.py $ARGS"
           python run.py $ARGS

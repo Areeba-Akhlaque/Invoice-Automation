@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from execution.config import (
+    _normalize_name,
     google_credentials,
     load_gemini_key,
     load_kimai_env,
@@ -77,6 +78,69 @@ def build_descriptions(kimai: KimaiClient, begin: str, finish: str) -> tuple[dic
     return descriptions, flags
 
 
+def build_projects_summary(sheets: SheetsClient, plan: InvoicePlan) -> str | None:
+    """One paragraph for the "PROJECTS ON THIS INVOICE" cell, condensed from every
+    person's project cell as it will appear on the new tab (fresh AI description,
+    else text carried over from the template tab). The previous invoice's paragraph
+    is passed as the style/length reference so it stays the same size. One extra
+    Gemini call; returns None on failure (the carried-over paragraph then stays)."""
+    settings = load_settings()
+    try:
+        gem = GeminiSummarizer(load_gemini_key(), settings["gemini"]["model"])
+    except RuntimeError as e:
+        print(f"  ! Projects summary skipped: {e}")
+        return None
+
+    lay = settings["layout"]
+    r0, r1 = lay["line_items_scan_rows"]
+    tab = plan.template_tab
+    # Best-effort: any Sheets read failing must NOT abort the invoice run — the
+    # cell simply keeps its carried-over text (mirrors the cap-carryover read).
+    try:
+        people = sheets.get_values(f"'{tab}'!{lay['person_col']}{r0}:{lay['person_col']}{r1}")
+        projects = sheets.get_values(f"'{tab}'!{lay['project_col']}{r0}:{lay['project_col']}{r1}")
+        hidden = sheets.hidden_rows(tab, r0, r1)
+        vals = sheets.get_values(f"'{tab}'!{lay['project_description']}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  ! Projects summary skipped (sheet read failed): {str(e)[:100]}")
+        return None
+
+    name_to_row: dict[str, int] = {}
+    carried: dict[str, str] = {}
+    for i, prow in enumerate(people):
+        name = prow[0] if prow else ""
+        if not name:
+            continue
+        row = r0 + i
+        key = _normalize_name(name)
+        name_to_row[key] = row
+        desc = projects[i][0] if i < len(projects) and projects[i] else ""
+        if str(desc).strip():
+            carried[key] = " ".join(str(desc).split()).strip()
+
+    # Include a person's blurb iff their row will actually be VISIBLE with text on
+    # the new tab — mirroring write_plan's billed-row logic so the paragraph matches
+    # the Project column exactly (no stale/hidden people, no omitted 0-hour people).
+    blurbs: list[str] = []
+    for li in plan.line_items:
+        key = _normalize_name(li.name)
+        row = name_to_row.get(key)
+        if row is None or key in plan.desc_flags:  # not on the sheet / cell blanked
+            continue
+        if li.hours is not None:
+            visible = True                 # write_plan writes hours (and unhides)
+        else:
+            visible = row not in hidden     # hidden + unset -> Option A blanks it
+        if not visible:
+            continue
+        desc = li.project_desc or carried.get(key, "")
+        if desc:
+            blurbs.append(desc)
+
+    example = str(vals[0][0]) if vals and vals[0] else ""
+    return gem.summarize_projects(blurbs, example)
+
+
 @dataclass
 class InvoiceRun:
     plan: InvoicePlan
@@ -137,6 +201,8 @@ def prepare(opts) -> InvoiceRun:
         descriptions=descriptions,
         desc_flags=desc_flags,
     )
+    if descriptions:  # fresh per-person cells exist -> refresh the overall paragraph too
+        plan.projects_summary = build_projects_summary(sheets, plan)
     return InvoiceRun(plan, sheets, (start, end), issue, hours_window, desc_win, log)
 
 

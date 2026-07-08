@@ -27,6 +27,32 @@ description. No other text.
 {blocks}
 """
 
+_PROJECTS_PROMPT = """You write the "PROJECTS ON THIS INVOICE" paragraph for a consulting invoice.
+
+Below are the per-person "project" cells from this invoice. Condense them into ONE
+short, cohesive paragraph summarizing the period's work as a whole.
+
+Rules (do not deviate):
+- LENGTH IS A HARD LIMIT: the paragraph MUST be at most {max_words} words (aim for
+  about {words}). Being over the limit is a failure. Count your words before answering.
+- Do NOT enumerate every deliverable. ABSTRACT the entries into a handful of themes
+  (engineering, QA, project management, security/infrastructure, customer support, ...)
+  and describe each theme in a few words. Drop minor/one-off details to stay in budget.
+- ONE paragraph of plain prose. No people's names, no bullets, no headings, no line breaks.
+- Describe ONLY work that appears in the entries below. No links/IDs/ticket numbers.
+- Match the tone and structure of the previous invoice's paragraph below (same size,
+  same level of abstraction) — but write this period's content, do not copy it.
+
+PREVIOUS INVOICE'S PARAGRAPH (style/length reference only — its content is from
+another period, do not copy it):
+{example}
+
+THIS INVOICE'S ENTRIES:
+{blocks}
+
+Return ONLY the paragraph text, at most {max_words} words.
+"""
+
 
 class GeminiSummarizer:
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash-lite"):
@@ -89,3 +115,64 @@ class GeminiSummarizer:
         for name, entries in people:
             out[name] = result.get(name) or "; ".join(self._dedupe(entries, 8))[:500]
         return out
+
+    def _generate_text(self, prompt: str) -> str | None:
+        """One text-generation call with retry on transient errors. None on failure."""
+        for attempt in range(3):
+            try:
+                resp = requests.post(
+                    GEMINI_URL.format(model=self.model),
+                    params={"key": self.api_key},
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "temperature": 0.3,
+                            "maxOutputTokens": 1024,
+                            "thinkingConfig": {"thinkingBudget": 0},
+                        },
+                    },
+                    timeout=90,
+                )
+                if resp.status_code in (429, 500, 503):
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                resp.raise_for_status()
+                text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                text = " ".join(text.split()).strip()
+                if text:
+                    return text
+            except Exception as e:  # noqa: BLE001
+                print(f"  ! projects summary attempt {attempt + 1} failed: {str(e)[:100]}")
+                time.sleep(3 * (attempt + 1))
+        return None
+
+    def summarize_projects(self, blurbs: list[str], example: str = "") -> str | None:
+        """Condenses all per-person project cells into the one "PROJECTS ON THIS
+        INVOICE" paragraph, sized like `example` (the previous invoice's paragraph).
+        Returns None on failure (caller keeps the carried-over text)."""
+        if not blurbs:
+            return None
+        example = " ".join(example.split()).strip()
+        words = min(max(len(example.split()), 60), 100) if example else 90
+        max_words = words + 15
+        prompt = _PROJECTS_PROMPT.format(
+            words=words,
+            max_words=max_words,
+            example=example or "(not available — use a neutral professional tone)",
+            blocks="\n".join(f"- {b}" for b in blurbs),
+        )
+        text = self._generate_text(prompt)
+        if not text:
+            return None
+        # Enforce the length ceiling: if the model overshot, ask it once to compress
+        # (keeps whole sentences, unlike a hard truncation). Keep the shorter of the two.
+        if len(text.split()) > max_words:
+            shorter = self._generate_text(
+                f"Rewrite the following paragraph as ONE paragraph of at most {max_words} "
+                f"words (target ~{words}), keeping the most important themes and dropping "
+                f"minor detail. Plain prose, no names/bullets/headings. Return ONLY the "
+                f"paragraph.\n\n{text}"
+            )
+            if shorter and len(shorter.split()) < len(text.split()):
+                text = shorter
+        return text

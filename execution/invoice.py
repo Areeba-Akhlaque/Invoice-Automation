@@ -40,6 +40,7 @@ class InvoicePlan:
     passthroughs: dict[str, float] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     desc_flags: dict[str, str] = field(default_factory=dict)  # normalized name -> reason
+    projects_summary: str | None = None  # "PROJECTS ON THIS INVOICE" paragraph
 
     @property
     def subtotal(self) -> float:
@@ -212,6 +213,8 @@ def write_plan(sheets, plan: InvoicePlan, tab_name: str | None = None) -> str:
     updates.append((lay["invoice_date"], plan.invoice_date))
     updates.append((lay["start_date"], plan.start_date))
     updates.append((lay["end_date"], plan.end_date))
+    if plan.projects_summary:
+        updates.append((lay["project_description"], plan.projects_summary))
 
     for li in plan.line_items:
         row = name_to_row.get(_normalize_name(li.name))

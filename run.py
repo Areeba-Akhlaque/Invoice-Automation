@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import textwrap
 from datetime import date
 
 from execution.config import load_settings
@@ -52,6 +53,10 @@ def _print_preview(plan) -> None:
         print("\n  AI descriptions:")
         for name, d in descs:
             print(f"    {name}: {d[:90]}{'...' if len(d) > 90 else ''}")
+    if plan.projects_summary:
+        print("\n  PROJECTS ON THIS INVOICE:")
+        print(textwrap.fill(plan.projects_summary, width=96,
+                            initial_indent="    ", subsequent_indent="    "))
     if plan.desc_flags:
         print("\n  ! Description FLAGS (left empty + cell note for review):")
         for name, reason in plan.desc_flags.items():

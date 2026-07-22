@@ -46,11 +46,15 @@ laborers:
     hours_source: manual     # Cherry's Kimai list excludes Keeko; billed manually
     kimai_user_id: 10        # kept for description pulls if she tracks in Kimai
 
+  # Off the project as of 2026-07 (DRC-0063 onward). Kept here with active:false —
+  # NOT deleted — so the writer knows to clear + hide the row it inherits from the
+  # previous invoice tab; deleting the entry would leave the copied hours billing.
   - name: "Muhammad Farhan"
     base_rate: 36
     markup: 1.0
     hours_source: fixed
     kimai_user_id: 30
+    active: false
 
   - name: "Alexander Pavelko"
     base_rate: 30

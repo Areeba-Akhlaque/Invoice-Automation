@@ -61,6 +61,8 @@ def build_descriptions(kimai: KimaiClient, begin: str, finish: str) -> tuple[dic
     flags: dict[str, str] = {}
     work: list[tuple[str, list[str]]] = []
     for p in load_roster():
+        if not p.get("active", True):  # off the project -> no description needed
+            continue
         if not (p.get("kimai_user_id") and p["hours_source"] in ("fixed", "kimai")):
             continue
         entries = by_user.get(p["kimai_user_id"]) or []

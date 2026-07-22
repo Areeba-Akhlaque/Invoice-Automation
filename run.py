@@ -57,6 +57,10 @@ def _print_preview(plan) -> None:
         print("\n  PROJECTS ON THIS INVOICE:")
         print(textwrap.fill(plan.projects_summary, width=96,
                             initial_indent="    ", subsequent_indent="    "))
+    if plan.retired:
+        print("\n  Off the project (line cleared, row left visible, not billed):")
+        for name in plan.retired:
+            print(f"    {name}")
     if plan.desc_flags:
         print("\n  ! Description FLAGS (left empty + cell note for review):")
         for name, reason in plan.desc_flags.items():

@@ -32,6 +32,7 @@ def load_roster() -> list[dict]:
     for person in roster:
         person["_key"] = _normalize_name(person["name"])
         person["bill_rate"] = round(person["base_rate"] * person.get("markup", 1.0), 4)
+        person["active"] = person.get("active", True)  # active:false -> off the project
     return roster
 
 

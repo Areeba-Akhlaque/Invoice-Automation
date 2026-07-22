@@ -41,6 +41,7 @@ class InvoicePlan:
     warnings: list[str] = field(default_factory=list)
     desc_flags: dict[str, str] = field(default_factory=dict)  # normalized name -> reason
     projects_summary: str | None = None  # "PROJECTS ON THIS INVOICE" paragraph
+    retired: list[str] = field(default_factory=list)  # active:false -> clear + hide their row
 
     @property
     def subtotal(self) -> float:
@@ -128,6 +129,9 @@ def build_plan(
     )
 
     for p in roster:
+        if not p.get("active", True):  # off the project -> no line item, row gets cleared
+            plan.retired.append(p["name"])
+            continue
         src = p["hours_source"]
         hours: float | None = None
         note = ""
@@ -206,7 +210,7 @@ def write_plan(sheets, plan: InvoicePlan, tab_name: str | None = None) -> str:
 
     updates: list[tuple[str, object]] = []
     rows_set: set[int] = set()
-    unhide: list[tuple[int, bool]] = []
+    row_vis: list[tuple[int, bool]] = []  # (row, hidden?) — show billed, hide off-boarded
     note_targets: list[tuple[int, str]] = []
 
     updates.append((lay["invoice_number"], plan.invoice_number))
@@ -225,7 +229,7 @@ def write_plan(sheets, plan: InvoicePlan, tab_name: str | None = None) -> str:
             updates.append((_col_row(hcol, row), li.hours))
             rows_set.add(row)
             if row in hidden:
-                unhide.append((row, False))  # billing them -> show the row
+                row_vis.append((row, False))  # billing them -> show the row
         key = _normalize_name(li.name)
         if key in plan.desc_flags:
             updates.append((_col_row(lay["project_col"], row), ""))  # leave empty, flag below
@@ -241,7 +245,21 @@ def write_plan(sheets, plan: InvoicePlan, tab_name: str | None = None) -> str:
         updates.append((_col_row(fcol, row), amount))
         rows_set.add(row)
         if row in hidden:
-            unhide.append((row, False))
+            row_vis.append((row, False))
+
+    # Off the project (roster active:false): the duplicated tab still carries their
+    # name + hours from the previous invoice, so clear the whole line (name, project,
+    # hours) and LEAVE THE ROW VISIBLE (not hidden). Blanking the name also means the
+    # next invoice's scan won't find them, so they stay gone going forward. Must run
+    # before Option A (which only touches hidden rows anyway).
+    for name in plan.retired:
+        row = name_to_row.get(_normalize_name(name))
+        if row is None:
+            continue
+        updates.append((_col_row(pcol, row), ""))                 # name
+        updates.append((_col_row(lay["project_col"], row), ""))   # project text
+        updates.append((_col_row(hcol, row), ""))                 # hours -> amount goes blank
+        rows_set.add(row)  # keep Option A from touching it too
 
     # Option A: hidden rows we are NOT setting must not inflate the subtotal -> clear them.
     for row in hidden:
@@ -260,7 +278,7 @@ def write_plan(sheets, plan: InvoicePlan, tab_name: str | None = None) -> str:
     else:
         updates.append((lay["discount_cell"], 0))
 
-    sheets.set_rows_hidden(new_tab, unhide)
+    sheets.set_rows_hidden(new_tab, row_vis)
     sheets.batch_update_cells(updates, new_tab)
 
     for row, reason in note_targets:

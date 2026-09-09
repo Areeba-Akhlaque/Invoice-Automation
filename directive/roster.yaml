@@ -39,7 +39,7 @@ laborers:
     kimai_user_id: 7
 
   - name: "Saymond Montoya"
-    base_rate: 16
+    base_rate: 19          # confirmed 2026-09 against the sheet
     markup: 1.0
     hours_source: fixed
     kimai_user_id: 12
@@ -75,13 +75,13 @@ laborers:
     active: false          # temporarily off the project (no hours) - flip to true when back
 
   - name: "JP Casabianca"
-    base_rate: 40.625
+    base_rate: 49          # confirmed 2026-09; 49 * 1.2 = 58.80 on the sheet
     markup: 1.2
     hours_source: fixed
     kimai_user_id: 36        # "Juan Pablo"
 
   - name: "Rafael Casabianca"
-    base_rate: 37.5
+    base_rate: 44          # confirmed 2026-09; 44 * 1.2 = 52.80 on the sheet
     markup: 1.2
     hours_source: fixed
     kimai_user_id: 37

@@ -44,9 +44,12 @@ jobs:
 
       # Inputs and secrets go through the environment, never interpolated into the
       # shell: `${{ inputs.x }}` inside a run: block is a command-injection hole.
-      - name: Restore Google OAuth token
+      - name: Restore Google credentials
         env:
           GOOGLE_TOKEN_JSON: ${{ secrets.GOOGLE_TOKEN_JSON || secrets.GOOGLE_TOKEN }}
+          # Must be visible here too: this step decides whether ANY credential
+          # exists, and a service-account-only setup has no GOOGLE_TOKEN_JSON.
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
           if [ -z "${GOOGLE_TOKEN_JSON:-}" ] && [ -z "${GOOGLE_SERVICE_ACCOUNT_JSON:-}" ]; then
@@ -55,7 +58,9 @@ jobs:
           fi
           if [ -n "${GOOGLE_TOKEN_JSON:-}" ]; then
             printf '%s' "$GOOGLE_TOKEN_JSON" > token.json
-            python -c "import json;json.load(open('token.json'));print('token.json parsed OK')"
+            # Fail here, readably, rather than mid-run on a 403: adding
+            # calendar.readonly invalidated every token minted before it.
+            python tools/check_token_scopes.py
           fi
 
       - name: Generate invoice

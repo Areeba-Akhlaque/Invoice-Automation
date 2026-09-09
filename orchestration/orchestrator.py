@@ -87,6 +87,14 @@ def unknown_names(names, roster) -> list[str]:
     return [n for n in names if _normalize_name(n) not in keys]
 
 
+def _check_date(value: str, label: str) -> None:
+    """A bad date must stop the run, not reach the sheet as a header cell."""
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise RuntimeError(f"{label} {value!r} is not a valid YYYY-MM-DD date") from None
+
+
 def _us_date(iso: str) -> str:
     d = datetime.strptime(iso, "%Y-%m-%d").date()
     return f"{d.month}/{d.day}/{d.year}"
@@ -327,8 +335,26 @@ def prepare(opts) -> InvoiceRun:
         raise RuntimeError("--desc-window names not in roster.yaml: " + ", ".join(unknown_win))
 
     start, end = g("start"), g("end")
-    if not start or not end:
+    # The workflow exposes start and end as separate optional inputs. Filling only
+    # one used to discard BOTH and silently fall back to the automatic period, so
+    # the invoice covered dates nobody asked for.
+    if bool(start) != bool(end):
+        raise RuntimeError(
+            f"--start and --end must be given together (got "
+            f"{'--start ' + start if start else '--end ' + end} alone)."
+        )
+    if start and end:
+        _check_date(start, "--start")
+        _check_date(end, "--end")
+        if start > end:
+            raise RuntimeError(f"--start {start} is after --end {end}")
+    else:
         start, end = current_billing_period()
+    for opt in ("invoice_date", "hours_start", "hours_end"):
+        if g(opt):
+            _check_date(g(opt), "--" + opt.replace("_", "-"))
+    if g("hours_start") and g("hours_end") and g("hours_start") > g("hours_end"):
+        raise RuntimeError(f"--hours-start {g('hours_start')} is after --hours-end {g('hours_end')}")
     issue = g("invoice_date") or issue_date_for(start, settings["schedule"]["issue_offset_days"])
     log = [f"Invoice period: {start} -> {end}   (issue {issue}, due = issue+7)"]
 

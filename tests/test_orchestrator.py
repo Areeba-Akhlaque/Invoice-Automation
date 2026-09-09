@@ -178,3 +178,56 @@ def test_people_with_no_entries_are_flagged_not_left_stale(monkeypatch):
         monkeypatch, _PartialSummarizer(), {"a": ["Echo1 Lead Sync"], "b": []}
     )
     assert flags == {"B": "no calendar entries in this period"}
+
+
+# --------------------------------------------------------------------------
+# Period options: the workflow exposes start and end as separate free-text inputs
+# --------------------------------------------------------------------------
+class _Opts:
+    def __init__(self, **kw):
+        self.__dict__.update(
+            dict(start=None, end=None, invoice_date=None, hours_start=None, hours_end=None,
+                 cap=None, manual=None, passthrough=None, desc_window=None, no_kimai=True,
+                 no_calendar=True, no_descriptions=True, allow_duplicate_period=False), **kw
+        )
+
+
+def _prepare_fails(**kw) -> str:
+    import pytest as _pytest
+
+    from orchestration.orchestrator import prepare
+
+    with _pytest.raises((RuntimeError, ValueError)) as e:
+        prepare(_Opts(**kw))
+    return str(e.value)
+
+
+def test_start_without_end_is_refused():
+    """Filling only one used to discard BOTH and silently invoice the automatic
+    period instead — dates nobody asked for."""
+    assert "together" in _prepare_fails(start="2026-10-01")
+
+
+def test_end_without_start_is_refused():
+    assert "together" in _prepare_fails(end="2026-10-15")
+
+
+def test_a_malformed_period_date_is_refused():
+    assert "YYYY-MM-DD" in _prepare_fails(start="01/10/2026", end="2026-10-15")
+
+
+def test_a_backwards_period_is_refused():
+    assert "after" in _prepare_fails(start="2026-10-15", end="2026-10-01")
+
+
+def test_a_malformed_hours_window_is_refused():
+    assert "YYYY-MM-DD" in _prepare_fails(hours_start="not-a-date")
+
+
+def test_a_backwards_hours_window_is_refused():
+    assert "after" in _prepare_fails(hours_start="2026-10-15", hours_end="2026-10-01")
+
+
+def test_shell_metacharacters_in_a_date_are_just_an_invalid_date():
+    """Workflow inputs reach argv, never a shell — this must read as a bad date."""
+    assert "YYYY-MM-DD" in _prepare_fails(start="2026-10-01; rm -rf /", end="2026-10-15")

@@ -69,10 +69,31 @@ class GeminiSummarizer:
                 uniq.append(" ".join(e.split()).strip())
         return uniq[:cap]
 
+    @staticmethod
+    def _key(name: str) -> str:
+        return " ".join(str(name).split()).strip().lower()
+
+    def _summarize_one(self, name: str, entries: list[str]) -> str | None:
+        """Single-person retry for anyone the batch call dropped."""
+        block = f"### {name}\n" + "\n".join(f"- {e}" for e in self._dedupe(entries))
+        text = self._generate_text(
+            _BATCH_PROMPT.format(blocks=block).replace(
+                "Return ONLY a JSON\nobject mapping each person's EXACT name (as the heading) to their one-line\ndescription. No other text.",
+                "Return ONLY the one-line description. No JSON, no name, no other text.",
+            )
+        )
+        if not text:
+            return None
+        text = text.strip().strip('"').strip()
+        return text or None
+
     def summarize_batch(self, people: list[tuple[str, list[str]]]) -> dict[str, str]:
         """One API call for many people. people = [(name, entries)]. Returns {name: summary}.
 
-        Falls back to per-person raw joins for anyone missing from the response.
+        Anyone the batch drops is retried individually; anyone still missing is
+        OMITTED from the result so the caller flags the cell for manual review.
+        It must never fall back to raw Kimai text — those are internal notes
+        ("Auth is down! Fixing now") and this cell goes to the client.
         """
         if not people:
             return {}
@@ -111,9 +132,23 @@ class GeminiSummarizer:
                 print(f"  ! batch summarize attempt {attempt + 1} failed: {str(e)[:100]}")
                 time.sleep(3 * (attempt + 1))
 
+        # Gemini often echoes the heading with different spacing/case — match loosely.
+        by_key = {self._key(k): v for k, v in result.items() if str(v).strip()}
         out: dict[str, str] = {}
+        missing: list[tuple[str, list[str]]] = []
         for name, entries in people:
-            out[name] = result.get(name) or "; ".join(self._dedupe(entries, 8))[:500]
+            got = by_key.get(self._key(name))
+            if got:
+                out[name] = got
+            else:
+                missing.append((name, entries))
+
+        for name, entries in missing:
+            got = self._summarize_one(name, entries)
+            if got:
+                out[name] = got
+            else:
+                print(f"  ! no AI description for {name} — cell will be flagged for review")
         return out
 
     def _generate_text(self, prompt: str) -> str | None:

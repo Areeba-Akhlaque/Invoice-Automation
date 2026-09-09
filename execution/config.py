@@ -64,6 +64,26 @@ def load_gemini_key() -> str:
     return key
 
 
+def _retry_refresh(creds, attempts: int = 4) -> None:
+    """Refresh an OAuth token, tolerating transient network failures."""
+    import random
+    import time
+
+    from google.auth.exceptions import TransportError
+    from google.auth.transport.requests import Request
+
+    for i in range(attempts):
+        try:
+            creds.refresh(Request())
+            return
+        except (TransportError, OSError) as e:
+            if i == attempts - 1:
+                raise
+            delay = 2**i + random.uniform(0, 0.5)
+            print(f"  ! token refresh failed ({str(e)[:80]}) — retrying in {delay:.1f}s")
+            time.sleep(delay)
+
+
 def google_credentials(settings: dict):
     """Resolve Google credentials.
 
@@ -86,7 +106,6 @@ def google_credentials(settings: dict):
         return service_account.Credentials.from_service_account_file(sa_file, scopes=scopes)
 
     # --- OAuth installed-app fallback (local dev) ---
-    from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
 
@@ -97,7 +116,9 @@ def google_credentials(settings: dict):
         creds = Credentials.from_authorized_user_file(str(token_path), scopes)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            # The scheduled run died here more than once on a DNS blip / reset
+            # reaching oauth2.googleapis.com (see scheduled.log) — retry first.
+            _retry_refresh(creds)
         else:
             matches = glob.glob(str(ROOT / g["client_secret_glob"]))
             if not matches:

@@ -45,6 +45,7 @@ laborers:
     markup: 1.0
     hours_source: manual     # Cherry's Kimai list excludes Keeko; billed manually
     kimai_user_id: 10        # kept for description pulls if she tracks in Kimai
+    active: false          # temporarily off the project (no hours) - flip to true when back
 
   # Off the project as of 2026-07 (DRC-0063 onward). Kept here with active:false —
   # NOT deleted — so the writer knows to clear + hide the row it inherits from the
@@ -67,6 +68,7 @@ laborers:
     markup: 1.2
     hours_source: kimai
     kimai_user_id: 35        # Kimai username "Dana Hettè"
+    active: false          # temporarily off the project (no hours) - flip to true when back
 
   - name: "JP Casabianca"
     base_rate: 40.625
@@ -85,6 +87,7 @@ laborers:
     markup: 1.2
     hours_source: fixed
     kimai_user_id: 38
+    active: false          # temporarily off the project (no hours) - flip to true when back
 
   - name: "William Titus"
     base_rate: 15
@@ -92,17 +95,20 @@ laborers:
     hours_source: fixed      # full-time -> 86.5 (not Kimai actuals); still tracks in Kimai for descriptions
     kimai_user_id: 41
 
+  # Off-boarded 2026-09. active:false -> no line item; if her row ever reappears on
+  # a copied tab it gets cleared. Keep the entry (do not delete) so the writer knows.
   - name: "Clarissa"
     base_rate: 30
     markup: 1.2
     hours_source: kimai
     kimai_user_id: 39        # alias "Clarissa Mitidiero"
+    active: false
 
-  - name: "Prameeth"
+  - name: "Prameeth Kotian"   # MUST match column B of the invoice tab exactly
     base_rate: 25
     markup: 1.2
     hours_source: kimai
-    kimai_user_id: 42        # alias "Prameeth Kotian"
+    kimai_user_id: 42
 
   - name: "Bradd Schofield"
     base_rate: 125

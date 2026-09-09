@@ -40,13 +40,14 @@ layout:
   hours_col: "D"
   rate_col: "E"
   amount_col: "F"
-  line_items_scan_rows: [16, 36]   # rows to scan for person names
-  subtotal_cell: "F37"             # =sum(F17:F35)
-  discount_cell: "F38"             # =F37-<contract amount>
-  total_cell: "D40"                # TOTAL = F37-F38 lives in D40 (display/reference)
+  # Billable rows ONLY — must equal the range inside the subtotal's SUM formula.
+  # validate_layout() checks this against the live sheet on every run and aborts
+  # if the tab has drifted (row 16 is the header, 34+ are the totals block).
+  line_items_scan_rows: [17, 32]
+  subtotal_cell: "F34"             # =SUM(F17:F32)
+  discount_cell: "F35"             # =F34-<contract amount>
+  total_cell: "D37"                # =F34-F35 (displayed next to the TOTAL label in D36)
 
-# Pass-through / third-party rows (located by name match in person column).
-passthroughs:
-  - "Softstackers AWS Infrastructure"
-  - "Softstackers Team Support"
-  - "Google Cloud Platform"
+# Pass-through / third-party rows are detected from the tab itself: any named row
+# in the billable range that is not a roster person keeps its carried amount unless
+# --passthrough overrides it. Nothing to list here.

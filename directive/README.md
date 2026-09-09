@@ -6,13 +6,31 @@ Orchestration layer reads these files and the Execution layer enforces them.
 | File | Holds |
 |---|---|
 | `settings.yaml` | spreadsheet id, invoice rules, schedule (run days), Gemini model, sheet cell layout, pass-through rows |
-| `roster.yaml` | each person: rate, markup, `hours_source` (fixed/kimai/manual), `kimai_user_id` |
+| `roster.yaml` | each person: rate, markup, `hours_source` (fixed/kimai/manual), `kimai_user_id`, `active` |
 
 ## The billing directives (Cherry's model)
 - **Advance billing:** invoice for period `[S,E]` is issued `S+7` (1-15 → 8th, 16-30 → 23rd); due = `E`. Automation runs the day before issue (**7th & 22nd**).
-- **Full-timers** → `86.5` hrs (estimate). **Hourly** (Dana, Clarissa, Alex, Prameeth) → Kimai actuals from the **previous complete half-month**. **James/Bradd/Keeko** → carried over from the previous invoice (estimate, adjusted later).
-- **Descriptions** → AI-summarized from each person's Kimai entries in `[issue-15, issue-1]`. Missing/repetitive → left empty + a review note.
-- **Total** = calculated subtotal (no auto-cap). The reviewer (Cherry) applies the agreed-amount discount manually.
+- **Full-timers** → `86.5` hrs (estimate). **Hourly** → Kimai actuals from the **previous complete half-month**. **James/Bradd** → carried over from the previous invoice (estimate, adjusted later).
+- **Descriptions** → AI-summarized from each person's Kimai entries in `[issue-15, issue-1]`. Missing/repetitive/ungeneratable → left empty + a review note. Raw Kimai text is **never** copied to the invoice; those are internal notes.
+- **Total** = calculated subtotal. The discount cell carries the previously agreed contract amount forward as an editable formula; the reviewer (Cherry) adjusts it.
 - **Hidden rows** with leftover values are cleared so the subtotal always equals the visible line items.
+
+## Two things that must stay in sync
+1. **`name` must match column B of the invoice tab exactly** (whitespace/case
+   ignored). A name that stops matching means the person is not billed — the run
+   now warns, but the fix belongs here. *(This is how "Prameeth" vs the sheet's
+   "Prameeth Kotian" went unnoticed and carried stale hours forward.)*
+2. **The `layout:` block must match the real tab.** `validate_layout()` checks it
+   on every run and aborts on a mismatch, because the cells silently drifted three
+   rows once (subtotal `F34`, discount `F35`, total `D37` — not `F37/F38/D40`).
+
+Rates in `roster.yaml` are **preview only** — the sheet's column E does the billing.
+The run warns when the two disagree.
+
+## `active: false`
+Someone off the project — permanently (off-boarded) or temporarily (no hours for
+now). They get no line item, and if their row still exists on the copied tab it is
+cleared and left visible. Keep the entry rather than deleting it: deleting would
+leave the inherited hours quietly billing. Flip back to `true` when they return.
 
 To change behaviour, edit these files — not the code.

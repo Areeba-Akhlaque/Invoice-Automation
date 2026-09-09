@@ -158,6 +158,38 @@ class SheetsClient:
         )
         self._meta_cache = None
 
+    def rename_sheet(self, title: str, new_title: str):
+        """Rename a tab, keeping its cells, comments and notes.
+
+        Used to retire a superseded invoice that cannot simply be deleted because
+        it carries review comments. Google rewrites cross-tab formula references
+        automatically, so check nothing points at the old name first.
+        """
+        sid = self.sheet_id(title)
+        if sid is None:
+            raise RuntimeError(f"Tab not found: {title}")
+        if new_title in self.sheet_titles():
+            raise RuntimeError(f"Tab {new_title} already exists.")
+        _retry(
+            lambda: self.svc.spreadsheets()
+            .batchUpdate(
+                spreadsheetId=self.sid,
+                body={
+                    "requests": [
+                        {
+                            "updateSheetProperties": {
+                                "properties": {"sheetId": sid, "title": new_title},
+                                "fields": "title",
+                            }
+                        }
+                    ]
+                },
+            )
+            .execute(),
+            what=f"rename {title} -> {new_title}",
+        )
+        self._meta_cache = None
+
     def move_sheet(self, title: str, new_index: int):
         sid = self.sheet_id(title)
         if sid is None:

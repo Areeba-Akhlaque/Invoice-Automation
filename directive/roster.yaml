@@ -114,8 +114,14 @@ laborers:
     hours_source: kimai
     kimai_user_id: 42
 
+  # Calendar is readable and busy (102 events in a fortnight) but ENTIRELY
+  # uncoloured, so there is no billable project to read yet. He has been asked to
+  # colour it; once he does, switch hours_source to calendar and set
+  # calendar_project to his client's label. Until then he stays manual and his
+  # description cell is flagged for review rather than left stale.
   - name: "Bradd Schofield"
     base_rate: 125
     markup: 1.0
     hours_source: manual
-    kimai_user_id: 4
+    calendar_id: "bradd@pvragon.com"
+    kimai_user_id: 4         # no Kimai entries either

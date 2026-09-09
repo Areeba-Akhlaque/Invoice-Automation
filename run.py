@@ -110,6 +110,7 @@ def main() -> None:
     ap.add_argument("--desc-window", default=None,
                     help='Per-person description window, e.g. "Victor Cheung=2026-08-10:2026-08-24"')
     ap.add_argument("--no-kimai", action="store_true", help="Skip Kimai (kimai people get 0 hours)")
+    ap.add_argument("--no-calendar", action="store_true", help="Skip Google Calendar (calendar people get no hours)")
     ap.add_argument("--no-descriptions", action="store_true", help="Skip AI project descriptions")
     ap.add_argument("--allow-duplicate-period", action="store_true",
                     help="Proceed even though the template tab already covers this period")

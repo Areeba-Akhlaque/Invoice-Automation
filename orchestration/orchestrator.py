@@ -17,6 +17,7 @@ from execution.config import (
     load_roster,
     load_settings,
 )
+from execution.gcal import CalendarClient
 from execution.invoice import InvoicePlan, build_plan, write_plan
 from execution.kimai import KimaiClient
 from execution.sheets import SheetsClient
@@ -92,18 +93,24 @@ def _us_date(iso: str) -> str:
 
 
 def build_descriptions(
-    kimai: KimaiClient,
+    kimai: KimaiClient | None,
     begin: str,
     finish: str,
     desc_windows: dict[str, tuple[str, str]] | None = None,
+    calendar_entries: dict[str, list[str]] | None = None,
     log: list[str] | None = None,
 ) -> tuple[dict, dict]:
-    """Returns (descriptions, flags). Flags = {name: reason} for missing/repetitive
-    Kimai descriptions (left empty + review note). Only fixed/kimai people who track
-    in Kimai are checked. One batched Gemini call (quota-friendly).
+    """Returns (descriptions, flags). Flags = {name: reason} for a description we
+    could not write (left empty + review note). One batched Gemini call.
 
-    desc_windows overrides the Kimai window for individual people (one extra Kimai
-    call each) — used when someone's default window holds nothing useful (e.g. PTO).
+    EVERY active person is considered, whatever their hours_source. People billed
+    manually used to be skipped entirely, so their project cell simply carried the
+    previous invoice's text forward -- James's and Bradd's lines were byte-identical
+    across DRC-0061..0064. A person with no time-tracking source is now flagged
+    rather than silently left stale.
+
+    desc_windows overrides the window for individual people (one extra call each)
+    -- used when someone's default window holds nothing useful (e.g. all PTO).
     """
     say = log.append if log is not None else print
     try:
@@ -112,13 +119,17 @@ def build_descriptions(
         say(f"  ! Descriptions skipped: {e}")
         return {}, {}
 
-    by_user = kimai.descriptions_by_user(begin, finish)
+    by_user = kimai.descriptions_by_user(begin, finish) if kimai else {}
 
     roster = load_roster()
     for key, (w_start, w_end) in (desc_windows or {}).items():
         person = next((p for p in roster if p["_key"] == key), None)
-        if person is None or person.get("kimai_user_id") is None:
-            say(f"  ! --desc-window ignored for {key!r}: not in roster.yaml or no kimai_user_id")
+        if person is None:
+            continue
+        if person["hours_source"] == "calendar":
+            continue  # already pulled with its own window by prepare()
+        if kimai is None or person.get("kimai_user_id") is None:
+            say(f"  ! --desc-window ignored for {person['name']}: no Kimai source")
             continue
         uid = person["kimai_user_id"]
         custom = kimai.descriptions_by_user(
@@ -135,12 +146,16 @@ def build_descriptions(
     for p in roster:
         if not p.get("active", True):  # off the project -> no description needed
             continue
-        if not (p.get("kimai_user_id") and p["hours_source"] in ("fixed", "kimai")):
+        if p["hours_source"] == "calendar":
+            entries, source = (calendar_entries or {}).get(p["_key"]) or [], "calendar"
+        elif p.get("kimai_user_id"):
+            entries, source = by_user.get(p["kimai_user_id"]) or [], "Kimai"
+        else:
+            flags[p["name"]] = "no time-tracking source configured in roster.yaml"
             continue
-        entries = by_user.get(p["kimai_user_id"]) or []
         uniq = {" ".join(e.split()).strip().lower() for e in entries if e.strip()}
         if not uniq:
-            flags[p["name"]] = "missing"
+            flags[p["name"]] = f"no {source} entries in this period"
         elif len(entries) >= 2 and len(uniq) == 1:
             flags[p["name"]] = "repetitive (same entry all period)"
         else:
@@ -155,6 +170,76 @@ def build_descriptions(
     if flags:
         say(f"  ! description flags (left empty + noted): {flags}")
     return descriptions, flags
+
+
+def pull_calendars(
+    credentials,
+    settings: dict,
+    roster: list[dict],
+    hours_window: tuple[str, str],
+    desc_window_default: tuple[str, str],
+    desc_windows: dict[str, tuple[str, str]],
+    log: list[str],
+) -> tuple[dict[str, float], dict[str, list[str]]]:
+    """Hours and description material for everyone with hours_source: calendar.
+
+    Their billable time is the events carrying their client's colour, matching the
+    Apps Script that fills the calendar-sync sheet. Hours use the same window as
+    Kimai people (the previous complete half-month); descriptions use the
+    description window, so one extra read per person unless the windows coincide.
+    """
+    people = [p for p in roster if p["active"] and p["hours_source"] == "calendar"]
+    if not people:
+        return {}, {}
+
+    cfg = settings.get("calendar") or {}
+    client = CalendarClient(
+        credentials,
+        timezone=cfg.get("timezone", "UTC"),
+        color_map=cfg.get("color_map"),
+        skip_all_day=cfg.get("skip_all_day_events", True),
+    )
+
+    hours: dict[str, float] = {}
+    entries: dict[str, list[str]] = {}
+    for p in people:
+        cal_id, project = p.get("calendar_id"), p.get("calendar_project")
+        if not cal_id or not project:
+            log.append(f"  ! {p['name']}: calendar_id / calendar_project missing in roster.yaml")
+            continue
+        try:
+            pull = client.collect(cal_id, project, *hours_window)
+        except Exception as e:  # noqa: BLE001 — a calendar we cannot read must not kill the run
+            log.append(f"  ! {p['name']}: calendar read failed ({str(e)[:90]})")
+            continue
+
+        hours[p["_key"]] = pull.hours
+        log.append(
+            f"  Calendar {p['name']}: {pull.hours:g} h of '{project}' from "
+            f"{pull.event_count} events ({hours_window[0]} -> {hours_window[1]})"
+        )
+        if pull.overlap_hours >= 0.5:
+            log.append(
+                f"  ! {p['name']}: {pull.overlap_hours:g} h counted twice from overlapping "
+                f"events — the calendar-sync sheet does the same, but check it"
+            )
+        other = {k: v for k, v in pull.totals.items() if k != project and v >= 1}
+        if other:
+            log.append(f"    (other colours that period: {other})")
+
+        d_window = desc_windows.get(p["_key"], desc_window_default)
+        if d_window == hours_window:
+            entries[p["_key"]] = pull.entries
+        else:
+            try:
+                entries[p["_key"]] = client.collect(cal_id, project, *d_window).entries
+                log.append(
+                    f"  Calendar descriptions for {p['name']}: {d_window[0]} -> {d_window[1]} "
+                    f"({len(entries[p['_key']])} events)"
+                )
+            except Exception as e:  # noqa: BLE001
+                log.append(f"  ! {p['name']}: calendar description read failed ({str(e)[:80]})")
+    return hours, entries
 
 
 def build_projects_summary(plan: InvoicePlan, log: list[str] | None = None) -> str | None:
@@ -232,29 +317,45 @@ def prepare(opts) -> InvoiceRun:
     issue = g("invoice_date") or issue_date_for(start, settings["schedule"]["issue_offset_days"])
     log = [f"Invoice period: {start} -> {end}   (issue {issue}, due = issue+7)"]
 
-    sheets = SheetsClient(settings["google"]["spreadsheet_id"], google_credentials(settings))
+    creds = google_credentials(settings)
+    sheets = SheetsClient(settings["google"]["spreadsheet_id"], creds)
 
+    ph_start, ph_end = previous_half_month(start)
+    hours_window = (g("hours_start") or ph_start, g("hours_end") or ph_end)
+    desc_win = description_window(issue)
+
+    kimai = None
     kimai_rows = None
-    descriptions: dict = {}
-    desc_flags: dict = {}
-    hours_window = desc_win = None
     if not g("no_kimai"):
         env = load_kimai_env()
         kimai = KimaiClient(env["url"], env["token"], env["user"], env["verify_ssl"])
-        ph_start, ph_end = previous_half_month(start)
-        h_start = g("hours_start") or ph_start
-        h_end = g("hours_end") or ph_end
-        hours_window = (h_start, h_end)
-        kimai_rows = kimai.hours_with_identity(f"{h_start}T00:00:00", f"{h_end}T23:59:59")
-        log.append(f"Hours window (hourly estimate): {h_start} -> {h_end}  ({len(kimai_rows)} users)")
+        kimai_rows = kimai.hours_with_identity(
+            f"{hours_window[0]}T00:00:00", f"{hours_window[1]}T23:59:59"
+        )
+        log.append(
+            f"Hours window (hourly estimate): {hours_window[0]} -> {hours_window[1]}  "
+            f"({len(kimai_rows)} users)"
+        )
 
-        if not g("no_descriptions"):
-            d_start, d_end = description_window(issue)
-            desc_win = (d_start, d_end)
-            log.append(f"Descriptions window: {d_start} -> {d_end}")
-            descriptions, desc_flags = build_descriptions(
-                kimai, f"{d_start}T00:00:00", f"{d_end}T23:59:59", desc_windows, log
-            )
+    calendar_hours: dict[str, float] = {}
+    calendar_entries: dict[str, list[str]] = {}
+    if not g("no_calendar"):
+        calendar_hours, calendar_entries = pull_calendars(
+            creds, settings, roster, hours_window, desc_win, desc_windows, log
+        )
+
+    descriptions: dict = {}
+    desc_flags: dict = {}
+    if not g("no_descriptions"):
+        log.append(f"Descriptions window: {desc_win[0]} -> {desc_win[1]}")
+        descriptions, desc_flags = build_descriptions(
+            kimai,
+            f"{desc_win[0]}T00:00:00",
+            f"{desc_win[1]}T23:59:59",
+            desc_windows,
+            calendar_entries,
+            log,
+        )
 
     plan = build_plan(
         sheets,
@@ -264,6 +365,7 @@ def prepare(opts) -> InvoiceRun:
         invoice_date=_us_date(issue),
         cap=g("cap"),
         manual_hours=manual_hours,
+        calendar_hours=calendar_hours,
         passthroughs=passthroughs,
         descriptions=descriptions,
         desc_flags=desc_flags,

@@ -16,9 +16,11 @@ from execution.config import (
     load_roster,
     load_settings,
 )
+from execution.gcal import DEFAULT_COLOR_LABEL, CalendarClient
 from execution.invoice import latest_invoice_tab, validate_layout
 from execution.kimai import KimaiClient
 from execution.sheets import SheetsClient
+from orchestration.schedule import current_billing_period, previous_half_month
 
 
 def check_google() -> str | None:
@@ -73,6 +75,44 @@ def check_roster_against_sheet(tab: str | None) -> None:
         print(f"  Rows on the sheet with no roster entry (pass-throughs etc.): {', '.join(extra)}")
 
 
+def check_calendars() -> None:
+    """Calendar-billed people: confirm the calendar is readable and, just as
+    important, show how much time is UNCOLOURED — that time is not billed to
+    anyone, and it has run at 33-53 h per half-month."""
+    print("\n== Calendars ==")
+    settings = load_settings()
+    roster = [p for p in load_roster() if p["active"] and p["hours_source"] == "calendar"]
+    if not roster:
+        print("  No one is billed from a calendar.")
+        return
+
+    cfg = settings.get("calendar") or {}
+    start, end = previous_half_month(current_billing_period()[0])
+    client = CalendarClient(
+        google_credentials(settings),
+        timezone=cfg.get("timezone", "UTC"),
+        color_map=cfg.get("color_map"),
+        skip_all_day=cfg.get("skip_all_day_events", True),
+    )
+    print(f"  Window (previous complete half-month): {start} -> {end}")
+    for p in roster:
+        cal_id, project = p.get("calendar_id"), p.get("calendar_project")
+        try:
+            pull = client.collect(cal_id, project, start, end)
+        except Exception as e:  # noqa: BLE001
+            print(f"  !! {p['name']} ({cal_id}): {str(e)[:140]}")
+            continue
+        print(f"  {p['name']}: {pull.hours:g} h billable as '{project}' ({pull.event_count} events)")
+        if pull.overlap_hours >= 0.5:
+            print(f"     ! {pull.overlap_hours:g} h counted twice (overlapping events)")
+        uncoloured = pull.totals.get(DEFAULT_COLOR_LABEL, 0)
+        if uncoloured:
+            print(f"     ! {uncoloured:g} h uncoloured — not billed to any project")
+        rest = {k: v for k, v in pull.totals.items() if k != project and v >= 1}
+        if rest:
+            print(f"     other colours: {rest}")
+
+
 def check_kimai() -> None:
     print("\n== Kimai ==")
     try:
@@ -100,5 +140,6 @@ def check_kimai() -> None:
 if __name__ == "__main__":
     tab = check_google()
     check_roster_against_sheet(tab)
+    check_calendars()
     check_kimai()
     print("\nDone.")

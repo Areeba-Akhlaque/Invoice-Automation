@@ -4,54 +4,13 @@ Auth-agnostic: takes a credentials object (service account or OAuth) built by
 execution.config.google_credentials. Reads the workbook, duplicates an invoice
 tab, writes cells, hides/unhides rows, and adds review notes.
 
-Every API call goes through _retry: the scheduled run used to die on transient
-DNS blips and connection resets (see scheduled.log), which left no invoice and
-no alert.
+Every API call goes through execution.retry (see that module for why).
 """
 from __future__ import annotations
 
-import random
-import socket
-import ssl
-import time
-
-import requests
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
-_RETRYABLE_EXC = (
-    socket.gaierror,
-    ssl.SSLError,
-    TimeoutError,
-    ConnectionError,
-    requests.exceptions.RequestException,
-    OSError,
-)
-_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
-
-
-def _is_retryable_http(e: HttpError) -> bool:
-    status = getattr(e, "status_code", None) or getattr(getattr(e, "resp", None), "status", None)
-    return status in _RETRYABLE_STATUS
-
-
-def _retry(fn, *, attempts: int = 4, what: str = "Sheets call"):
-    """Run fn() with exponential backoff on transient network/API errors."""
-    last: Exception | None = None
-    for i in range(attempts):
-        try:
-            return fn()
-        except HttpError as e:
-            if not _is_retryable_http(e):
-                raise  # 400/403/404 are real bugs — fail fast, don't mask them
-            last = e
-        except _RETRYABLE_EXC as e:
-            last = e
-        if i < attempts - 1:
-            delay = 2**i + random.uniform(0, 0.5)
-            print(f"  ! {what} failed ({str(last)[:90]}) — retry {i + 1}/{attempts - 1} in {delay:.1f}s")
-            time.sleep(delay)
-    raise last  # type: ignore[misc]
+from execution.retry import retry as _retry
 
 
 class SheetsClient:

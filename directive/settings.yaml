@@ -8,6 +8,9 @@ google:
   token_file: "token.json"
   scopes:
     - "https://www.googleapis.com/auth/spreadsheets"
+    # Needed by hours_source: calendar. Adding a scope invalidates an existing
+    # token.json -- run `python tools/reauth.py` (and refresh the CI secret).
+    - "https://www.googleapis.com/auth/calendar.readonly"
 
 invoice:
   client: "David Roberts Consulting"
@@ -21,6 +24,26 @@ invoice:
 schedule:
   run_days: [7, 22]        # day-of-month the automation generates a draft
   issue_offset_days: 7     # invoice issue date = period start + this
+
+# Calendar-based hours (hours_source: calendar). Mirrors the Apps Script that
+# populates the calendar-sync sheet, so the numbers agree with it.
+calendar:
+  timezone: "America/Los_Angeles"
+  skip_all_day_events: true      # Home / trips / OOO are 1440-minute noise
+  # gCal colour id -> project label, copied from that sheet's ColorMapping tab.
+  # roster.yaml refers to a person's billable label (calendar_project).
+  color_map:
+    1: "[Lavender]"
+    2: "Ride Care"
+    3: "Revolve"
+    4: "Pvragon"
+    5: "Medical"
+    6: "[Tangerine]"
+    7: "Lifestyle"
+    8: "Non-Attributable"
+    9: "Conformational Aesthetics"
+    10: "MtG"
+    11: "[Tomato]"
 
 gemini:
   model: "gemini-2.5-flash-lite"   # free-tier model (higher daily quota than 2.5-flash)

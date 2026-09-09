@@ -75,7 +75,7 @@ def test_unknown_names_flags_typos():
 def test_roster_entries_are_well_formed():
     for p in load_roster():
         assert p["name"].strip(), "a roster entry has an empty name"
-        assert p["hours_source"] in {"fixed", "kimai", "manual"}, p["name"]
+        assert p["hours_source"] in {"fixed", "kimai", "manual", "calendar"}, p["name"]
         assert isinstance(p["base_rate"], (int, float)), p["name"]
         assert p["bill_rate"] > 0, p["name"]
 
@@ -83,6 +83,23 @@ def test_roster_entries_are_well_formed():
 def test_roster_names_are_unique_after_normalisation():
     keys = [p["_key"] for p in load_roster()]
     assert len(keys) == len(set(keys)), "two roster entries normalise to the same name"
+
+
+def test_calendar_sourced_people_have_a_calendar_and_project():
+    for p in load_roster():
+        if p["active"] and p["hours_source"] == "calendar":
+            assert p.get("calendar_id"), f"{p['name']} has no calendar_id"
+            assert p.get("calendar_project"), f"{p['name']} has no calendar_project"
+
+
+def test_calendar_projects_exist_in_the_colour_map():
+    labels = set(load_settings()["calendar"]["color_map"].values())
+    for p in load_roster():
+        if p["active"] and p["hours_source"] == "calendar":
+            assert p["calendar_project"] in labels, (
+                f"{p['name']}: calendar_project {p['calendar_project']!r} is not in "
+                f"settings.yaml calendar.color_map"
+            )
 
 
 def test_kimai_sourced_people_have_a_user_id():

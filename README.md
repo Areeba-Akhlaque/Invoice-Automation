@@ -19,7 +19,8 @@ Flow is one-directional: `run.py → orchestration → execution` (the directive
 layer is data that both read).
 
 ## How it works (high level)
-- Pulls hours from the time-tracking source for the relevant period.
+- Pulls hours from each person's time source for the relevant period — Kimai, a
+  fixed full-time figure, a colour-coded Google Calendar, or a manual override.
 - Writes one concise description per person from their time entries.
 - Duplicates the latest invoice tab and fills only the variable cells, so the
   sheet's own rate/formula logic is preserved.
@@ -78,7 +79,18 @@ ruff check .
 | `--cap 51188` | agreed total; the discount cell fills the gap (blank = carry over the previous invoice's) |
 | `--desc-window "Victor Cheung=2026-08-10:2026-08-24"` | pull *one* person's description from a different Kimai window (e.g. their default window is all PTO) |
 | `--allow-duplicate-period` | proceed even though the previous tab covers this period |
-| `--no-kimai` / `--no-descriptions` | skip those steps |
+| `--no-kimai` / `--no-calendar` / `--no-descriptions` | skip those steps |
+
+### Google scopes
+`directive/settings.yaml` lists the OAuth scopes. Adding one (e.g. `calendar.readonly`
+for `hours_source: calendar`) invalidates an existing token, and the run now says so
+instead of failing with an opaque 403:
+
+```bash
+python tools/reauth.py    # re-authorise locally, then update GOOGLE_TOKEN_JSON
+```
+The Calendar API also has to be enabled once for the Cloud project the OAuth client
+belongs to.
 
 ### One-off maintenance
 ```bash

@@ -16,11 +16,15 @@
 # tab (whitespace ignored when matching).
 
 laborers:
+  # Bills from his Google Calendar, not Kimai (he has no Kimai entries at all).
+  # Hours = the "Ride Care" colour; descriptions come from those event titles.
   - name: "James Hereford"
     base_rate: 200
     markup: 1.0
-    hours_source: manual
-    kimai_user_id: 3         # "Jaime"
+    hours_source: calendar
+    calendar_id: "jaime@pvragon.com"
+    calendar_project: "Ride Care"
+    kimai_user_id: 3         # "Jaime" - kept, but he does not track there
 
   - name: "Roman Naidenko"
     base_rate: 58

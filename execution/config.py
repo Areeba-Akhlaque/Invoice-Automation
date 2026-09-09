@@ -114,6 +114,15 @@ def google_credentials(settings: dict):
     creds = None
     if token_path.exists():
         creds = Credentials.from_authorized_user_file(str(token_path), scopes)
+        # A token minted before a scope was added still loads and refreshes fine,
+        # then fails deep inside an API call with a confusing 403. Catch it here.
+        if not creds.has_scopes(scopes):
+            missing = [s for s in scopes if s not in (creds.scopes or [])]
+            raise RuntimeError(
+                f"{g['token_file']} is missing scope(s): {', '.join(missing)}.\n"
+                "Run `python tools/reauth.py` to re-authorise, then update the "
+                "GOOGLE_TOKEN_JSON secret if the cloud run uses it."
+            )
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             # The scheduled run died here more than once on a DNS blip / reset

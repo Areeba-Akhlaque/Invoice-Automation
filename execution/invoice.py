@@ -260,6 +260,7 @@ def build_plan(
     invoice_date: str,
     cap: float | None,
     manual_hours: dict[str, float] | None = None,
+    calendar_hours: dict[str, float] | None = None,
     passthroughs: dict[str, float] | None = None,
     descriptions: dict[str, str] | None = None,
     desc_flags: dict[str, str] | None = None,
@@ -307,6 +308,7 @@ def build_plan(
             if key:
                 kimai_by_name[_normalize_name(key)] = row["hours"]
     manual_idx = {_normalize_name(k): v for k, v in (manual_hours or {}).items()}
+    calendar_idx = calendar_hours or {}
     desc_idx = {_normalize_name(k): v for k, v in (descriptions or {}).items()}
 
     plan = InvoicePlan(
@@ -358,6 +360,12 @@ def build_plan(
             else:
                 hours = 0.0
                 note = "no Kimai hours found for period"
+                plan.warnings.append(f"{p['name']}: {note}")
+        elif src == "calendar":
+            if p["_key"] in calendar_idx:
+                hours = calendar_idx[p["_key"]]
+            else:
+                note = "no calendar hours for this period (calendar not read?)"
                 plan.warnings.append(f"{p['name']}: {note}")
         elif src == "manual" and p["_key"] not in manual_idx:
             note = "estimate carried over from previous invoice (adjust later)"

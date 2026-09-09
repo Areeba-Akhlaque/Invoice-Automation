@@ -121,3 +121,60 @@ def test_layout_scan_rows_are_sane():
 
 def test_normalize_name_is_whitespace_and_case_insensitive():
     assert _normalize_name("  Roman   Naidenko  ") == _normalize_name("roman naidenko")
+
+
+# --------------------------------------------------------------------------
+# Behaviour when the summarizer itself is down
+# --------------------------------------------------------------------------
+class _DeadSummarizer:
+    """Model unreachable / daily quota spent: returns nothing for everyone."""
+
+    def summarize_batch(self, people):
+        return {}
+
+
+class _PartialSummarizer:
+    """Answers for the first person only."""
+
+    def summarize_batch(self, people):
+        return {people[0][0]: "Some real work, and more work."} if people else {}
+
+
+def _run_build_descriptions(monkeypatch, summarizer, entries):
+    import orchestration.orchestrator as orch
+
+    monkeypatch.setattr(orch, "load_gemini_key", lambda: "key")
+    monkeypatch.setattr(orch, "GeminiSummarizer", lambda *a, **k: summarizer)
+    monkeypatch.setattr(orch, "load_roster", lambda: [
+        {"name": "A", "_key": "a", "active": True, "hours_source": "calendar"},
+        {"name": "B", "_key": "b", "active": True, "hours_source": "calendar"},
+    ])
+    return orch.build_descriptions(None, "x", "y", {}, entries, [])
+
+
+def test_a_total_summarizer_outage_leaves_the_carried_text_alone(monkeypatch):
+    """Blanking every project cell because the API was down is worse than keeping
+    last period's text — the run says so loudly instead."""
+    descriptions, flags = _run_build_descriptions(
+        monkeypatch, _DeadSummarizer(), {"a": ["Echo1 Lead Sync"], "b": ["Data Migration"]}
+    )
+    assert descriptions == {}
+    assert flags == {}  # nothing flagged -> write_plan writes nothing -> cells carry over
+
+
+def test_one_person_missing_is_still_flagged(monkeypatch):
+    """A single failure is about that person's entries, so their cell is emptied
+    and noted rather than left showing someone else's stale work."""
+    descriptions, flags = _run_build_descriptions(
+        monkeypatch, _PartialSummarizer(), {"a": ["Echo1 Lead Sync"], "b": ["Data Migration"]}
+    )
+    assert "A" in descriptions
+    assert flags == {"B": "AI summary unavailable"}
+
+
+def test_people_with_no_entries_are_flagged_not_left_stale(monkeypatch):
+    """James's and Bradd's cells were identical across four invoices."""
+    _descriptions, flags = _run_build_descriptions(
+        monkeypatch, _PartialSummarizer(), {"a": ["Echo1 Lead Sync"], "b": []}
+    )
+    assert flags == {"B": "no calendar entries in this period"}

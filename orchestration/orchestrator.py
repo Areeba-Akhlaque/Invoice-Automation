@@ -162,8 +162,20 @@ def build_descriptions(
             work.append((p["name"], entries))
 
     descriptions = gem.summarize_batch(work)
-    # Anyone the summarizer could not write is flagged rather than filled with raw
-    # Kimai text — those entries are internal notes and this cell goes to the client.
+
+    if work and not descriptions:
+        # Nobody came back: the model is down or the daily quota is spent, not a
+        # problem with anyone's time entries. Blanking every project cell over an
+        # outage is worse than leaving last period's text in place, so write
+        # nothing and let the carried-over cells stand — loudly.
+        say(
+            f"  !! AI descriptions UNAVAILABLE for all {len(work)} people (model error or "
+            f"quota). Project cells keep the PREVIOUS invoice's text — check them before sending."
+        )
+        return {}, flags
+
+    # An individual who came back empty is flagged rather than filled with raw
+    # entries — those are internal notes and this cell goes to the client.
     for name, _entries in work:
         if name not in descriptions:
             flags[name] = "AI summary unavailable"
@@ -177,16 +189,19 @@ def pull_calendars(
     settings: dict,
     roster: list[dict],
     hours_window: tuple[str, str],
-    desc_window_default: tuple[str, str],
     desc_windows: dict[str, tuple[str, str]],
     log: list[str],
 ) -> tuple[dict[str, float], dict[str, list[str]]]:
     """Hours and description material for everyone with hours_source: calendar.
 
     Their billable time is the events carrying their client's colour, matching the
-    Apps Script that fills the calendar-sync sheet. Hours use the same window as
-    Kimai people (the previous complete half-month); descriptions use the
-    description window, so one extra read per person unless the windows coincide.
+    Apps Script that fills the calendar-sync sheet.
+
+    The description covers exactly the events that produced the hours: same window,
+    same colour. For Kimai people the two windows differ by design (hours are the
+    previous complete half-month, descriptions the fortnight up to the issue date),
+    but here the description IS the itemisation of the billed time, so they must
+    agree. An explicit --desc-window still overrides it.
     """
     people = [p for p in roster if p["active"] and p["hours_source"] == "calendar"]
     if not people:
@@ -227,7 +242,7 @@ def pull_calendars(
         if other:
             log.append(f"    (other colours that period: {other})")
 
-        d_window = desc_windows.get(p["_key"], desc_window_default)
+        d_window = desc_windows.get(p["_key"], hours_window)
         if d_window == hours_window:
             entries[p["_key"]] = pull.entries
         else:
@@ -341,7 +356,7 @@ def prepare(opts) -> InvoiceRun:
     calendar_entries: dict[str, list[str]] = {}
     if not g("no_calendar"):
         calendar_hours, calendar_entries = pull_calendars(
-            creds, settings, roster, hours_window, desc_win, desc_windows, log
+            creds, settings, roster, hours_window, desc_windows, log
         )
 
     descriptions: dict = {}

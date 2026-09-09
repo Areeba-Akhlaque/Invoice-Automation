@@ -136,13 +136,30 @@ def test_events_on_different_days_never_overlap():
 
 
 def test_entries_are_deduplicated_in_order():
-    """"Ride Care" appears as a title many times a fortnight."""
+    """A recurring meeting appears many times a fortnight; the AI needs it once."""
     got = summarise(
-        [ev(9, 0, 10, 0, name="Ride Care"), ev(11, 0, 12, 0, name="Echo1 Lead Sync"),
-         ev(13, 0, 14, 0, name="ride care")],
+        [ev(9, 0, 10, 0, name="Echo1 Lead Sync"), ev(11, 0, 12, 0, name="Data Migration"),
+         ev(13, 0, 14, 0, name="echo1 lead sync")],
         "Ride Care",
     )
-    assert got.entries == ["Ride Care", "Echo1 Lead Sync"]
+    assert got.entries == ["Echo1 Lead Sync", "Data Migration"]
+
+
+def test_blocks_titled_after_the_project_are_not_description_material():
+    """James's calendar is full of blocks literally titled "Ride Care"; on a Ride
+    Care invoice that word is noise. They still count toward the hours."""
+    got = summarise(
+        [ev(9, 0, 10, 0, name="Ride Care"), ev(10, 0, 11, 0, name="Ride CAre"),
+         ev(11, 0, 12, 0, name="Echo1 Lead Sync")],
+        "Ride Care",
+    )
+    assert got.entries == ["Echo1 Lead Sync"]
+    assert got.hours == 3.0  # all three are still billed
+
+
+def test_a_project_titled_block_is_kept_when_it_carries_a_description():
+    got = summarise([ev(9, 0, 10, 0, name="Ride Care", desc="Cutover planning")], "Ride Care")
+    assert got.entries == ["Ride Care — Cutover planning"]
 
 
 def test_no_events_is_zero_not_an_error():

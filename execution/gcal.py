@@ -180,9 +180,15 @@ def summarise(events: list[CalEvent], project: str) -> CalendarPull:
     mine = [e for e in events if e.project == project]
     minutes = sum(e.minutes for e in mine)
 
+    # A block titled after the project itself ("Ride Care") says nothing on a
+    # Ride Care invoice, and there are many of them — drop them from the
+    # description material (they still count toward the hours).
+    label = " ".join(project.split()).lower()
     seen: set[str] = set()
     entries: list[str] = []
     for e in mine:
+        if " ".join(e.summary.split()).lower() == label and not e.description:
+            continue
         key = e.entry.lower()
         if key not in seen:
             seen.add(key)

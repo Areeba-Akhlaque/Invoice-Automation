@@ -41,7 +41,7 @@ class TemplateSnapshot:
 
 def _num(v) -> float | None:
     """UNFORMATTED_VALUE gives real numbers, but blanks/strings still show up."""
-    if isinstance(v, (int, float)):
+    if isinstance(v, int | float):
         return float(v)
     s = str(v or "").strip().replace("$", "").replace(",", "")
     if not s:

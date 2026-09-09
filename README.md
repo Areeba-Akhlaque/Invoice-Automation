@@ -66,10 +66,13 @@ python run.py                  # preview (writes nothing)
 python run.py --write          # create the tab
 python check_setup.py          # verify connectivity
 
-pip install -r requirements-dev.txt
-pytest                         # 80+ tests, no network needed
+pip install -r requirements-dev.txt   # pins the SAME ruff/pytest as CI
+pytest                         # 110+ tests, no network needed
 ruff check .
 ```
+> Install the dev requirements rather than `pip install ruff` — the pinned version
+> is what CI runs, and different ruff releases enable different rules. A newer
+> local ruff will happily pass code that CI then rejects.
 
 ### Useful flags
 | Flag | What it does |

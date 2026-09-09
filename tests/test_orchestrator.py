@@ -76,7 +76,7 @@ def test_roster_entries_are_well_formed():
     for p in load_roster():
         assert p["name"].strip(), "a roster entry has an empty name"
         assert p["hours_source"] in {"fixed", "kimai", "manual", "calendar"}, p["name"]
-        assert isinstance(p["base_rate"], (int, float)), p["name"]
+        assert isinstance(p["base_rate"], int | float), p["name"]
         assert p["bill_rate"] > 0, p["name"]
 
 

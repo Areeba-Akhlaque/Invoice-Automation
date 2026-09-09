@@ -19,8 +19,15 @@ on:
         description: "Period end YYYY-MM-DD (optional)"
         required: false
       cap:
-        description: "Contract amount (final total). Discount = subtotal - this. Blank = no discount."
+        description: "Contract amount (final total). Discount = subtotal - this. Blank = carry over the previous invoice's."
         required: false
+      desc_window:
+        description: 'Per-person description window, e.g. "Victor Cheung=2026-08-10:2026-08-24"'
+        required: false
+      allow_duplicate_period:
+        description: "Proceed even if the previous tab already covers this period"
+        type: boolean
+        default: false
 
 jobs:
   build-invoice:
@@ -31,11 +38,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - run: pip install -r requirements.txt
 
+      # Inputs and secrets go through the environment, never interpolated into the
+      # shell: `${{ inputs.x }}` inside a run: block is a command-injection hole.
       - name: Restore Google OAuth token
-        run: printf '%s' '${{ secrets.GOOGLE_TOKEN_JSON || secrets.GOOGLE_TOKEN }}' > token.json
+        env:
+          GOOGLE_TOKEN_JSON: ${{ secrets.GOOGLE_TOKEN_JSON || secrets.GOOGLE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_TOKEN_JSON:-}" ] && [ -z "${GOOGLE_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "::error::No Google credentials: set GOOGLE_SERVICE_ACCOUNT_JSON (preferred) or GOOGLE_TOKEN_JSON."
+            exit 1
+          fi
+          if [ -n "${GOOGLE_TOKEN_JSON:-}" ]; then
+            printf '%s' "$GOOGLE_TOKEN_JSON" > token.json
+            python -c "import json;json.load(open('token.json'));print('token.json parsed OK')"
+          fi
 
       - name: Generate invoice
         env:
@@ -43,13 +64,28 @@ jobs:
           KIMAI_URL: ${{ secrets.KIMAI_URL || secrets.KIMAI_API_URL }}
           KIMAI_TOKEN: ${{ secrets.KIMAI_TOKEN || secrets.KIMAI_API_TOKEN || secrets.KIMAI_API }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.GEMINI_API }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          EVENT_NAME: ${{ github.event_name }}
+          IN_WRITE: ${{ inputs.write }}
+          IN_START: ${{ inputs.start }}
+          IN_END: ${{ inputs.end }}
+          IN_CAP: ${{ inputs.cap }}
+          IN_DESC_WINDOW: ${{ inputs.desc_window }}
+          IN_ALLOW_DUP: ${{ inputs.allow_duplicate_period }}
         run: |
-          ARGS="--yes"
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.write }}" = "true" ]; then
-            ARGS="$ARGS --write"
+          set -euo pipefail
+          args=(--yes)
+          if [ "$EVENT_NAME" = "schedule" ] || [ "${IN_WRITE:-}" = "true" ]; then
+            args+=(--write)
           fi
-          if [ -n "${{ inputs.start }}" ]; then ARGS="$ARGS --start ${{ inputs.start }}"; fi
-          if [ -n "${{ inputs.end }}" ]; then ARGS="$ARGS --end ${{ inputs.end }}"; fi
-          if [ -n "${{ inputs.cap }}" ]; then ARGS="$ARGS --cap ${{ inputs.cap }}"; fi
-          echo "Running: python run.py $ARGS"
-          python run.py $ARGS
+          if [ -n "${IN_START:-}" ]; then args+=(--start "$IN_START"); fi
+          if [ -n "${IN_END:-}" ]; then args+=(--end "$IN_END"); fi
+          if [ -n "${IN_CAP:-}" ]; then args+=(--cap "$IN_CAP"); fi
+          if [ -n "${IN_DESC_WINDOW:-}" ]; then args+=(--desc-window "$IN_DESC_WINDOW"); fi
+          if [ "${IN_ALLOW_DUP:-}" = "true" ]; then args+=(--allow-duplicate-period); fi
+          echo "Running: python run.py ${args[*]}"
+          python run.py "${args[@]}"
+
+      - name: Remove restored token
+        if: always()
+        run: rm -f token.json

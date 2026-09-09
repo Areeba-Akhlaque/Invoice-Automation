@@ -1,6 +1,8 @@
-requests>=2.31
-PyYAML>=6.0
-python-dotenv>=1.0
-google-api-python-client>=2.120
-google-auth>=2.29
-google-auth-oauthlib>=1.2
+# Pinned: the scheduled run installs fresh every time, so an unpinned upgrade
+# could break invoicing with no warning. Bump deliberately, then re-run tests.
+requests==2.32.5
+PyYAML==6.0.3
+python-dotenv==1.2.2
+google-api-python-client==2.190.0
+google-auth==2.52.0
+google-auth-oauthlib==1.2.4

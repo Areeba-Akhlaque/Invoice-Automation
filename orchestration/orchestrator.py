@@ -170,23 +170,26 @@ def build_descriptions(
             work.append((p["name"], entries))
 
     descriptions = gem.summarize_batch(work)
+    missing = [name for name, _entries in work if name not in descriptions]
 
-    if work and not descriptions:
-        # Nobody came back: the model is down or the daily quota is spent, not a
-        # problem with anyone's time entries. Blanking every project cell over an
-        # outage is worse than leaving last period's text in place, so write
-        # nothing and let the carried-over cells stand — loudly.
+    if missing and gem.unavailable:
+        # The API was rate-limited, out of quota or down. That says nothing about
+        # these people's time entries, so blanking their project cells would be
+        # wrong -- leave the carried-over text and say so loudly. (A partial
+        # success is the common shape: the free-tier daily quota ran out mid-run
+        # and seven of eight people were about to be emptied.)
         say(
-            f"  !! AI descriptions UNAVAILABLE for all {len(work)} people (model error or "
-            f"quota). Project cells keep the PREVIOUS invoice's text — check them before sending."
+            f"  !! AI unavailable (rate limit / quota / outage) for {len(missing)} of "
+            f"{len(work)}: {', '.join(missing)}. Their project cells keep the PREVIOUS "
+            f"invoice's text — check them before sending."
         )
-        return {}, flags
-
-    # An individual who came back empty is flagged rather than filled with raw
-    # entries — those are internal notes and this cell goes to the client.
-    for name, _entries in work:
-        if name not in descriptions:
+    else:
+        # An individual who came back empty while the API was healthy is flagged
+        # rather than filled with raw entries -- those are internal notes and this
+        # cell goes to the client.
+        for name in missing:
             flags[name] = "AI summary unavailable"
+
     if flags:
         say(f"  ! description flags (left empty + noted): {flags}")
     return descriptions, flags

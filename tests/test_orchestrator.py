@@ -129,12 +129,25 @@ def test_normalize_name_is_whitespace_and_case_insensitive():
 class _DeadSummarizer:
     """Model unreachable / daily quota spent: returns nothing for everyone."""
 
+    unavailable = True
+
     def summarize_batch(self, people):
         return {}
 
 
 class _PartialSummarizer:
-    """Answers for the first person only."""
+    """Answers for the first person only, with the API otherwise healthy."""
+
+    unavailable = False
+
+    def summarize_batch(self, people):
+        return {people[0][0]: "Some real work, and more work."} if people else {}
+
+
+class _QuotaRanOutSummarizer:
+    """The real shape of a spent free-tier quota: some answers, then 429s."""
+
+    unavailable = True
 
     def summarize_batch(self, people):
         return {people[0][0]: "Some real work, and more work."} if people else {}
@@ -160,6 +173,17 @@ def test_a_total_summarizer_outage_leaves_the_carried_text_alone(monkeypatch):
     )
     assert descriptions == {}
     assert flags == {}  # nothing flagged -> write_plan writes nothing -> cells carry over
+
+
+def test_a_partial_quota_failure_does_not_blank_the_rest(monkeypatch):
+    """Quota ran out mid-run: one person answered, seven were about to have their
+    project cells emptied over an outage that says nothing about their work."""
+    descriptions, flags = _run_build_descriptions(
+        monkeypatch, _QuotaRanOutSummarizer(),
+        {"a": ["Echo1 Lead Sync"], "b": ["Data Migration"]},
+    )
+    assert "A" in descriptions
+    assert flags == {}  # B is not flagged -> B's cell keeps its carried text
 
 
 def test_one_person_missing_is_still_flagged(monkeypatch):

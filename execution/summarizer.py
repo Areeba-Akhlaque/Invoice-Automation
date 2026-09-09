@@ -58,6 +58,10 @@ class GeminiSummarizer:
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash-lite"):
         self.api_key = api_key
         self.model = model
+        # Set when the API itself is the problem (rate limit, quota, outage) as
+        # opposed to one person's entries. The caller uses it to decide between
+        # flagging a cell for review and leaving the carried-over text alone.
+        self.unavailable = False
 
     @staticmethod
     def _dedupe(entries: list[str], cap: int = 40) -> list[str]:
@@ -121,6 +125,7 @@ class GeminiSummarizer:
                     timeout=90,
                 )
                 if resp.status_code in (429, 500, 503):
+                    self.unavailable = True
                     time.sleep(3 * (attempt + 1))
                     continue
                 resp.raise_for_status()
@@ -147,8 +152,6 @@ class GeminiSummarizer:
             got = self._summarize_one(name, entries)
             if got:
                 out[name] = got
-            else:
-                print(f"  ! no AI description for {name} — cell will be flagged for review")
         return out
 
     def _generate_text(self, prompt: str) -> str | None:
@@ -169,6 +172,7 @@ class GeminiSummarizer:
                     timeout=90,
                 )
                 if resp.status_code in (429, 500, 503):
+                    self.unavailable = True
                     time.sleep(3 * (attempt + 1))
                     continue
                 resp.raise_for_status()

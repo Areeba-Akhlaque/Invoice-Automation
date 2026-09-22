@@ -31,6 +31,14 @@ SUBTOTAL = "F34"
         ("=F34 - 55500", 55500.0),
         ("=F34-51188.50", 51188.50),
         ("=F34-51,188", 51188.0),
+        # Reviewers write the contract the way they think about it: a monthly
+        # figure halved. This shape appeared on DRC-0065 and silently produced
+        # no cap at all, so the next invoice carried no discount.
+        ("=F34-(115250/2)", 57625.0),
+        ("=F34-(115250 / 2)", 57625.0),
+        ("=(SUM(F17:F32)-(115250/2))", 57625.0),
+        ("=F34-(50000+7625)", 57625.0),
+        ("=F34-(57625)", 57625.0),
     ],
 )
 def test_parse_carried_cap_accepts_the_shapes_we_write(formula, expected):
@@ -45,9 +53,17 @@ def test_parse_carried_cap_accepts_the_shapes_we_write(formula, expected):
         "0",
         "",
         "=F34-F35",          # reference, not a number
-        "=F34-51188-500",    # chained: which one is the cap? neither — refuse
         "=SUM(F17:F32)-F41",
         "=OTHER-51188",      # not our subtotal cell
+        # '=F34-51188-500' means F34 minus 51,688 -- reading the tail as part of
+        # the amount would give 50,688 and overstate the invoice by $1,000.
+        "=F34-51188-500",
+        "=F34-(115250/2)-500",
+        "=F34-500+(115250/2)",
+        "=F34-(115250/0)",   # division by zero
+        "=F34-(-5000)",      # a negative contract amount is meaningless
+        "=F34-0",
+        "=F34-F35*2",
     ],
 )
 def test_parse_carried_cap_refuses_anything_ambiguous(formula):

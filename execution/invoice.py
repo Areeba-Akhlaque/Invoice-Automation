@@ -237,18 +237,62 @@ def next_invoice_number(num: int, prefix: str, pad: int) -> str:
     return f"{prefix}-{num + 1:0{pad}d}"
 
 
+def _arithmetic_value(expr: str) -> float | None:
+    """Evaluate a plain arithmetic expression like '115250/2' or '(57625)'.
+
+    Reviewers write the contract amount the way they think about it — a monthly
+    figure halved, for instance — so the cap is not always a bare number. Only
+    digits, . ( ) and + - * / are allowed through, and the result must be a
+    finite positive number; anything else returns None rather than a guess.
+    """
+    expr = expr.strip()
+    if not expr or not re.fullmatch(r"[0-9.()+\-*/\s]+", expr) or not re.search(r"[0-9]", expr):
+        return None
+    try:
+        value = eval(expr, {"__builtins__": {}}, {})  # noqa: S307 — charset is whitelisted above
+    except (SyntaxError, ZeroDivisionError, TypeError, NameError, ValueError):
+        return None
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return None
+    value = float(value)
+    if value <= 0 or value != value or value in (float("inf"), float("-inf")):
+        return None
+    return round(value, 2)
+
+
 def parse_carried_cap(discount_formula: str, subtotal_cell: str) -> float | None:
     """Read the agreed contract amount out of the previous discount formula.
 
-    Accepts only the two shapes we actually write/expect —
-    '=F34-51188' and '=(SUM(F17:F32)-51188)'. A bare number, a chained
-    '=F34-51188-500', or a cell reference returns None rather than a wrong cap:
+    The shape is '<subtotal> - <contract amount>', where the amount may be a
+    number or a small arithmetic expression: '=F34-51188', '=(SUM(F17:F32)-51188)'
+    and '=F34-(115250/2)' all mean the same thing to a reviewer. A bare number,
+    a cell reference, or anything else returns None rather than a wrong cap —
     a misread here silently rewrites the invoice total.
     """
     txt = str(discount_formula or "").replace(",", "").strip()
-    pat = rf"^=\s*\(?\s*(?:SUM\([^)]*\)|{re.escape(subtotal_cell)})\s*-\s*([0-9]+(?:\.[0-9]+)?)\s*\)?\s*$"
+    pat = rf"^=\s*\(?\s*(?:SUM\([^)]*\)|{re.escape(subtotal_cell)})\s*-\s*(.+?)\s*$"
     m = re.match(pat, txt, re.I)
-    return float(m.group(1)) if m else None
+    if not m:
+        return None
+    rest = m.group(1)
+    # '=(SUM(...)-51188)' wraps the whole thing; drop that one trailing bracket.
+    if txt.lstrip("=").lstrip().startswith("(") and rest.endswith(")") and rest.count("(") < rest.count(")"):
+        rest = rest[:-1]
+    rest = rest.strip()
+
+    # The amount must be ONE term: a bare number, or a single bracketed group.
+    # A trailing term instead belongs to the subtraction — '=F34-51188-500' means
+    # F34 minus 51,688, not minus 50,688 — so refuse it rather than invert a sign.
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", rest):
+        return _arithmetic_value(rest)
+    if not (rest.startswith("(") and rest.endswith(")")):
+        return None
+    depth = 0
+    for i, ch in enumerate(rest):
+        depth += (ch == "(") - (ch == ")")
+        if depth == 0 and i < len(rest) - 1:
+            return None  # brackets close early, so something follows the group
+    return _arithmetic_value(rest)
 
 
 def build_plan(

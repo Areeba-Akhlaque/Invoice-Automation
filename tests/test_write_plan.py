@@ -16,6 +16,16 @@ LAY = {
 }
 
 
+# write_plan reads the live directive layer, so pin it here: these tests are
+# about the writer's behaviour, not about which rows the sheet currently uses.
+# Without this the whole file broke the day a row was deleted from the tab.
+@pytest.fixture(autouse=True)
+def _fixed_layout(monkeypatch):
+    import execution.invoice as inv
+
+    monkeypatch.setattr(inv, "load_settings", lambda: {"layout": LAY})
+
+
 class FakeSheets:
     """Records what write_plan does instead of calling Google."""
 

@@ -108,11 +108,15 @@ laborers:
     kimai_user_id: 39        # alias "Clarissa Mitidiero"
     active: false
 
+  # Off-boarded 2026-09 (DRC-0067 onward); his row was deleted from DRC-0066 by
+  # hand, which is what shifted the whole totals block up one row. Prefer
+  # active:false over deleting a row: it clears the line and leaves the layout be.
   - name: "Prameeth Kotian"   # MUST match column B of the invoice tab exactly
     base_rate: 25
     markup: 1.2
     hours_source: kimai
     kimai_user_id: 42
+    active: false
 
   # Calendar is readable and busy (102 events in a fortnight) but ENTIRELY
   # uncoloured, so there is no billable project to read yet. He has been asked to

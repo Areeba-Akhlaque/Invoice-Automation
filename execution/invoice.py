@@ -627,6 +627,6 @@ def _fill_new_tab(sheets, plan: InvoicePlan, new_tab: str, lay: dict) -> str:
             new_tab,
             row,
             lay["project_col"],
-            f"⚠ Description {reason} for this period - please review & fill manually. (Areeba)",
+            f"⚠ No description written: {reason}. Please review and fill this cell manually. (Areeba)",
         )
     return new_tab

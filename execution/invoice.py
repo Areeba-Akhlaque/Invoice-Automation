@@ -31,6 +31,7 @@ class TemplateSnapshot:
     rates: dict[int, float | None] = field(default_factory=dict)
     amounts: dict[int, float | None] = field(default_factory=dict)
     amount_formulas: dict[int, str] = field(default_factory=dict)
+    rate_formulas: dict[int, str] = field(default_factory=dict)
     projects: dict[int, str] = field(default_factory=dict)  # column C text already on the tab
     hidden: set[int] = field(default_factory=set)
     start_date: str = ""
@@ -62,7 +63,7 @@ def read_template(sheets, tab: str, lay: dict) -> TemplateSnapshot:
     names = sheets.get_values(f"'{tab}'!{pcol}{r0}:{pcol}{r1}")
     projects = sheets.get_values(f"'{tab}'!{lay['project_col']}{r0}:{lay['project_col']}{r1}")
     nums = sheets.get_values(f"'{tab}'!{hcol}{r0}:{fcol}{r1}", unformatted=True)
-    forms = sheets.get_values(f"'{tab}'!{fcol}{r0}:{fcol}{r1}", formulas=True)
+    forms = sheets.get_values(f"'{tab}'!{hcol}{r0}:{fcol}{r1}", formulas=True)
 
     for i in range(r1 - r0 + 1):
         row = r0 + i
@@ -77,9 +78,11 @@ def read_template(sheets, tab: str, lay: dict) -> TemplateSnapshot:
         snap.hours[row] = _num(cells[0])
         snap.rates[row] = _num(cells[1])
         snap.amounts[row] = _num(cells[2])
-        f = forms[i][0] if i < len(forms) and forms[i] else ""
-        if str(f).strip():
-            snap.amount_formulas[row] = str(f)
+        fcells = (forms[i] if i < len(forms) else []) + [""] * 3
+        if str(fcells[1]).strip():
+            snap.rate_formulas[row] = str(fcells[1])
+        if str(fcells[2]).strip():
+            snap.amount_formulas[row] = str(fcells[2])
 
     snap.hidden = sheets.hidden_rows(tab, r0, r1)
 
@@ -137,6 +140,43 @@ def detect_layout(sheets, tab: str, lay: dict) -> dict | None:
                 break
         return found
     return None
+
+
+def resolve_layout(sheets, tab: str, lay: dict, prefix: str) -> tuple[dict, list[str]]:
+    """The cell map to actually use for `tab`, plus anything worth reporting.
+
+    settings.yaml is the expected layout, but people legitimately add and remove
+    rows on the sheet, which shifts the whole totals block. Rather than abort and
+    wait for someone to hand-edit the config (twice now), follow the tab when it
+    has clearly moved — and say so loudly, so the config still gets corrected.
+
+    Aborts only when the tab cannot be read coherently at all; writing into
+    guessed cells would corrupt a client invoice.
+    """
+    problems = validate_layout(sheets, tab, lay, prefix)
+    if not problems:
+        return lay, []
+
+    found = detect_layout(sheets, tab, lay)
+    if found:
+        moved = {**lay, **found}
+        if not validate_layout(sheets, tab, moved, prefix):
+            return moved, [
+                f"layout moved on '{tab}' — using "
+                + ", ".join(f"{k}={v!r}" for k, v in found.items())
+                + ". Update the `layout:` block in directive/settings.yaml to match."
+            ]
+
+    msg = (
+        f"Invoice tab layout does not match directive/settings.yaml (checked '{tab}'):\n"
+        + "\n".join(f"  - {p}" for p in problems)
+    )
+    if found:
+        msg += (
+            f"\n\n'{tab}' looks like this, but it still does not validate — check the tab:\n"
+            + "\n".join(f"  {k}: {v!r}" for k, v in found.items())
+        )
+    raise RuntimeError(msg + "\n\nFix the `layout:` block before running.")
 
 
 def validate_layout(sheets, tab: str, lay: dict, prefix: str) -> list[str]:
@@ -243,6 +283,7 @@ class InvoicePlan:
     projects_summary: str | None = None  # "PROJECTS ON THIS INVOICE" paragraph
     retired: list[str] = field(default_factory=list)  # active:false -> clear their row
     snapshot: TemplateSnapshot | None = None
+    layout: dict = field(default_factory=dict)  # resolved for THIS tab, not just settings.yaml
 
     @property
     def effective_passthroughs(self) -> dict[str, float]:
@@ -366,13 +407,7 @@ def build_plan(
     template_tab, latest_num = latest_invoice_tab(titles, prefix)
     inv_no = next_invoice_number(latest_num, prefix, pad)
 
-    problems = validate_layout(sheets, template_tab, lay, prefix)
-    if problems:
-        raise RuntimeError(
-            f"Invoice tab layout does not match directive/settings.yaml (checked '{template_tab}'):\n"
-            + "\n".join(f"  - {p}" for p in problems)
-            + "\nFix the `layout:` block in directive/settings.yaml before running."
-        )
+    lay, layout_notes = resolve_layout(sheets, template_tab, lay, prefix)
 
     snap = read_template(sheets, template_tab, lay)
 
@@ -410,12 +445,14 @@ def build_plan(
         passthroughs=passthroughs or {},
         desc_flags={_normalize_name(k): v for k, v in (desc_flags or {}).items()},
         snapshot=snap,
+        layout=lay,
     )
     if snap.start_date.strip() == start_date and snap.end_date.strip() == end_date:
         plan.warnings.append(
             f"same period as '{template_tab}' — proceeding because --allow-duplicate-period was given"
         )
 
+    plan.warnings.extend(layout_notes)
     roster_keys = {p["_key"] for p in roster}
 
     for p in roster:
@@ -517,8 +554,7 @@ def write_plan(sheets, plan: InvoicePlan, tab_name: str | None = None) -> str:
     deleted — otherwise it would sit in the sheet holding the *previous*
     invoice's numbers and also block the retry (the name would already exist).
     """
-    settings = load_settings()
-    lay = settings["layout"]
+    lay = plan.layout or load_settings()["layout"]
     new_tab = tab_name or plan.invoice_number
 
     if new_tab in sheets.sheet_titles(refresh=True):
@@ -598,6 +634,12 @@ def _fill_new_tab(sheets, plan: InvoicePlan, new_tab: str, lay: dict) -> str:
         updates.append((_col_row(pcol, row), ""))  # name
         updates.append((_col_row(lay["project_col"], row), ""))  # project text
         updates.append((_col_row(hcol, row), ""))  # hours -> amount goes blank
+        # Most rate cells blank themselves — '=if(isblank($B25),"",XLOOKUP(...))'
+        # — but some are hardcoded ('=25*1.2'), and those left a rate sitting on
+        # an otherwise empty line. Clear only the ones that will not self-blank.
+        rate_formula = snap.rate_formulas.get(row, "")
+        if rate_formula and not re.search(rf"isblank\(\s*\$?{pcol}\d+", rate_formula, re.I):
+            updates.append((_col_row(lay["rate_col"], row), ""))
         rows_set.add(row)  # keep Option A from touching it too
 
     # Option A: hidden rows we are NOT setting must not inflate the subtotal -> clear them.

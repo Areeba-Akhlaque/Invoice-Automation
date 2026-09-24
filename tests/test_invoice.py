@@ -15,6 +15,7 @@ from execution.invoice import (
     latest_invoice_tab,
     next_invoice_number,
     parse_carried_cap,
+    resolve_layout,
     validate_layout,
 )
 
@@ -308,3 +309,47 @@ def test_detect_layout_gives_up_rather_than_guessing():
 def test_detect_layout_ignores_a_sum_that_is_not_above_its_range():
     """A stray =SUM() elsewhere on the sheet must not be mistaken for the total."""
     assert detect_layout(ColumnSheets({"F5": "=SUM(F17:F32)"}), "X", LAYOUT) is None
+
+
+# --------------------------------------------------------------------------
+# Following a layout that has moved
+# --------------------------------------------------------------------------
+class MovableSheets(ColumnSheets):
+    """A tab whose totals block sits wherever _tab_at put it, plus a header."""
+
+    def __init__(self, subtotal_row, first, last, invoice="DRC-0065"):
+        col = _tab_at(subtotal_row, first, last).column
+        col["F5"] = invoice
+        super().__init__(col)
+
+
+def test_resolve_layout_uses_the_config_when_it_still_matches():
+    sheets = MovableSheets(34, 17, 32)
+    lay, notes = resolve_layout(sheets, "DRC-0065", LAYOUT, "DRC")
+    assert lay == LAYOUT
+    assert notes == []
+
+
+def test_resolve_layout_follows_the_tab_when_rows_were_deleted():
+    """Deleting the empty rows shifts the totals up. The run should carry on
+    against the real geometry and say so, not stop and wait for a config edit."""
+    sheets = MovableSheets(29, 17, 27)
+    lay, notes = resolve_layout(sheets, "DRC-0066", LAYOUT, "DRC")
+    assert lay["line_items_scan_rows"] == [17, 27]
+    assert lay["subtotal_cell"] == "F29"
+    assert lay["discount_cell"] == "F30"
+    assert lay["total_cell"] == "D32"
+    assert notes and "layout moved" in notes[0]
+    assert "settings.yaml" in notes[0]
+
+
+def test_resolve_layout_keeps_the_unmoved_parts_of_the_config():
+    lay, _ = resolve_layout(MovableSheets(29, 17, 27), "DRC-0066", LAYOUT, "DRC")
+    assert lay["person_col"] == LAYOUT["person_col"]
+    assert lay["project_description"] == LAYOUT["project_description"]
+
+
+def test_resolve_layout_refuses_a_tab_it_cannot_read():
+    """Writing into guessed cells would corrupt a client invoice."""
+    with pytest.raises(RuntimeError, match="does not match"):
+        resolve_layout(ColumnSheets({"F5": "DRC-0065"}), "DRC-0065", LAYOUT, "DRC")

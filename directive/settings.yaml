@@ -66,10 +66,12 @@ layout:
   # Billable rows ONLY — must equal the range inside the subtotal's SUM formula.
   # validate_layout() checks this against the live sheet on every run and aborts
   # if the tab has drifted (row 16 is the header, 34+ are the totals block).
-  line_items_scan_rows: [17, 32]
-  subtotal_cell: "F34"             # =SUM(F17:F32)
-  discount_cell: "F35"             # =F34-<contract amount>
-  total_cell: "D37"                # =F34-F35 (displayed next to the TOTAL label in D36)
+  # These follow the tab: resolve_layout re-detects them if rows are added or
+  # removed, warns, and carries on — keep them current anyway so the warning stops.
+  line_items_scan_rows: [17, 27]
+  subtotal_cell: "F29"             # =SUM(F17:F27)
+  discount_cell: "F30"             # =F29-<contract amount>
+  total_cell: "D32"                # =F29-F30 (next to the TOTAL label in D31)
 
 # Pass-through / third-party rows are detected from the tab itself: any named row
 # in the billable range that is not a roster person keeps its carried amount unless

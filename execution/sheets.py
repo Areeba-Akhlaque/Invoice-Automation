@@ -173,6 +173,37 @@ class SheetsClient:
         )
         self._meta_cache = None
 
+    def delete_rows(self, title: str, rows: list[int]):
+        """Delete whole rows (1-based) from a tab.
+
+        Everything below shifts up, so the totals block moves — resolve_layout
+        follows that automatically, but settings.yaml should still be corrected.
+        Deleted highest-first so earlier indices stay valid while deleting.
+        """
+        if not rows:
+            return
+        sid = self.sheet_id(title)
+        reqs = [
+            {
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": sid,
+                        "dimension": "ROWS",
+                        "startIndex": row - 1,
+                        "endIndex": row,
+                    }
+                }
+            }
+            for row in sorted(set(rows), reverse=True)
+        ]
+        _retry(
+            lambda: self.svc.spreadsheets()
+            .batchUpdate(spreadsheetId=self.sid, body={"requests": reqs})
+            .execute(),
+            what=f"delete {len(reqs)} row(s) from {title}",
+        )
+        self._meta_cache = None
+
     def delete_sheet(self, title: str):
         sid = self.sheet_id(title)
         if sid is None:

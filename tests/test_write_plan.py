@@ -192,3 +192,35 @@ def test_a_failed_write_rolls_the_partial_tab_back(snapshot):
         write_plan(sheets, _plan(snapshot))
     assert sheets.deleted == ["DRC-0066"]
     assert "DRC-0066" not in sheets.titles
+
+
+# --------------------------------------------------------------------------
+# Clearing an off-boarded person's line
+# --------------------------------------------------------------------------
+def test_a_hardcoded_rate_is_cleared_with_the_rest_of_the_line(snapshot):
+    """'=25*1.2' does not blank itself, so an off-boarded person's row kept
+    showing $30.00 against an otherwise empty line."""
+    snapshot.rate_formulas = {25: "=25*1.2"}
+    sheets = FakeSheets(["DRC-0065"])
+    write_plan(sheets, _plan(snapshot, retired=["Prameeth Kotian"]))
+    assert sheets.written["B25"] == ""
+    assert sheets.written["C25"] == ""
+    assert sheets.written["D25"] == ""
+    assert sheets.written["E25"] == ""  # the rate too
+
+
+def test_a_self_blanking_rate_formula_is_left_alone(snapshot):
+    """'=if(isblank($B25),"",XLOOKUP(...))' empties itself once the name goes —
+    overwriting it would throw the formula away for whoever fills the row next."""
+    snapshot.rate_formulas = {25: '=if(isblank($B25), "", XLOOKUP($B25, LaborerNames, LaborerRates))'}
+    sheets = FakeSheets(["DRC-0065"])
+    write_plan(sheets, _plan(snapshot, retired=["Prameeth Kotian"]))
+    assert sheets.written["B25"] == ""
+    assert "E25" not in sheets.written
+
+
+def test_a_row_with_no_rate_formula_at_all_is_still_cleared(snapshot):
+    sheets = FakeSheets(["DRC-0065"])
+    write_plan(sheets, _plan(snapshot, retired=["Prameeth Kotian"]))
+    assert sheets.written["B25"] == ""
+    assert "E25" not in sheets.written

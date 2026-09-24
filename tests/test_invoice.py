@@ -11,6 +11,7 @@ import pytest
 from execution.invoice import (
     InvoicePlan,
     LineItem,
+    detect_layout,
     latest_invoice_tab,
     next_invoice_number,
     parse_carried_cap,
@@ -250,3 +251,60 @@ def test_validate_layout_catches_a_discount_that_lost_its_subtotal_reference():
 def test_validate_layout_catches_a_non_invoice_tab():
     problems = validate_layout(_good_sheet(F5="Summary"), "DRC-0065", LAYOUT, "DRC")
     assert any("invoice_number" in p for p in problems)
+
+
+# --------------------------------------------------------------------------
+# Recovering from a shifted layout
+# --------------------------------------------------------------------------
+class ColumnSheets:
+    """Serves a whole column, as detect_layout reads it."""
+
+    def __init__(self, column: dict[str, str]):
+        self.column = column
+
+    def get_values(self, a1_range, formulas=False, unformatted=False):
+        ref = a1_range.split("!")[-1]
+        if ":" not in ref:
+            v = self.column.get(ref)
+            return [[v]] if v is not None else []
+        col = ref[0]
+        lo, hi = (int(p[1:]) for p in ref.split(":"))
+        return [[self.column.get(f"{col}{r}", "")] for r in range(lo, hi + 1)]
+
+
+def _tab_at(subtotal_row: int, first: int, last: int) -> ColumnSheets:
+    return ColumnSheets({
+        f"F{subtotal_row}": f"=SUM(F{first}:F{last})",
+        f"F{subtotal_row + 1}": f"=F{subtotal_row}-55875",
+        f"D{subtotal_row + 2}": "TOTAL",
+        f"D{subtotal_row + 3}": f"=F{subtotal_row}-F{subtotal_row + 1}",
+    })
+
+
+def test_detect_layout_finds_the_current_geometry():
+    assert detect_layout(_tab_at(34, 17, 32), "DRC-0065", LAYOUT) == {
+        "line_items_scan_rows": [17, 32],
+        "subtotal_cell": "F34",
+        "discount_cell": "F35",
+        "total_cell": "D37",
+    }
+
+
+def test_detect_layout_follows_a_deleted_row():
+    """Deleting one person's row shifts the whole totals block up — this is what
+    the failure message offers to paste into settings.yaml."""
+    assert detect_layout(_tab_at(33, 17, 31), "DRC-0066", LAYOUT) == {
+        "line_items_scan_rows": [17, 31],
+        "subtotal_cell": "F33",
+        "discount_cell": "F34",
+        "total_cell": "D36",
+    }
+
+
+def test_detect_layout_gives_up_rather_than_guessing():
+    assert detect_layout(ColumnSheets({"F34": "just a number"}), "X", LAYOUT) is None
+
+
+def test_detect_layout_ignores_a_sum_that_is_not_above_its_range():
+    """A stray =SUM() elsewhere on the sheet must not be mistaken for the total."""
+    assert detect_layout(ColumnSheets({"F5": "=SUM(F17:F32)"}), "X", LAYOUT) is None

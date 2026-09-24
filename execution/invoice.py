@@ -94,6 +94,51 @@ def read_template(sheets, tab: str, lay: dict) -> TemplateSnapshot:
     return snap
 
 
+def detect_layout(sheets, tab: str, lay: dict) -> dict | None:
+    """Work out where the totals block actually is on `tab`.
+
+    Deleting or inserting a row shifts the whole block, and the cell map then has
+    to be corrected by hand — twice so far. When validation fails we run this and
+    print the values to paste into settings.yaml, so the fix is mechanical.
+
+    Anchored on the one unmistakable cell: the subtotal's =SUM over the amount
+    column. Returns None if that cannot be found.
+    """
+    fcol, dcol = lay["amount_col"], lay["hours_col"]
+    try:
+        col = sheets.get_values(f"'{tab}'!{fcol}1:{fcol}60", formulas=True)
+    except Exception:  # noqa: BLE001
+        return None
+
+    for i, row in enumerate(col):
+        cell = str(row[0]) if row else ""
+        m = re.match(rf"^=\s*SUM\(\s*{fcol}(\d+)\s*:\s*{fcol}(\d+)\s*\)\s*$", cell, re.I)
+        if not m:
+            continue
+        subtotal_row = i + 1
+        r0, r1 = int(m.group(1)), int(m.group(2))
+        if not (r0 < r1 < subtotal_row):
+            continue
+        found = {
+            "line_items_scan_rows": [r0, r1],
+            "subtotal_cell": f"{fcol}{subtotal_row}",
+            "discount_cell": f"{fcol}{subtotal_row + 1}",
+        }
+        # The total sits a couple of rows below, in the hours column.
+        for offset in (2, 3, 4):
+            probe = f"{dcol}{subtotal_row + offset}"
+            try:
+                v = sheets.get_values(f"'{tab}'!{probe}", formulas=True)
+            except Exception:  # noqa: BLE001
+                continue
+            text = str(v[0][0]) if v and v[0] else ""
+            if f"{fcol}{subtotal_row}".upper() in text.upper():
+                found["total_cell"] = probe
+                break
+        return found
+    return None
+
+
 def validate_layout(sheets, tab: str, lay: dict, prefix: str) -> list[str]:
     """Check settings.yaml's cell map still matches the real tab.
 

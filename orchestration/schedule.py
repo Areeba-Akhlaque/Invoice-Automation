@@ -1,7 +1,8 @@
 """ORCHESTRATION — billing calendar logic (pure functions, no I/O).
 
 Cherry's advance-billing model: bill 1-15 and 16-EOM; issue = period start + 7;
-due = period end. The automation runs the day before issue (7th & 22nd).
+due = period end. The draft is generated a few days ahead of issue; which days
+is configuration (settings.yaml schedule.run_days), currently the 5th & 20th.
 """
 from __future__ import annotations
 

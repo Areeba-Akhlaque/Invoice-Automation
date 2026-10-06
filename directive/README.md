@@ -9,7 +9,7 @@ Orchestration layer reads these files and the Execution layer enforces them.
 | `roster.yaml` | each person: rate, markup, `hours_source` (fixed/kimai/manual), `kimai_user_id`, `active` |
 
 ## The billing directives (Cherry's model)
-- **Advance billing:** invoice for period `[S,E]` is issued `S+7` (1-15 → 8th, 16-30 → 23rd); due = `E`. Automation runs the day before issue (**7th & 22nd**).
+- **Advance billing:** invoice for period `[S,E]` is issued `S+7` (1-15 → 8th, 16-30 → 23rd); due = `E`. The draft is generated on the **5th & 20th** (midnight Pacific), a few days ahead of the issue date so there is time to review. Moving those days does not move the issue date — that is computed from the period.
 - **Full-timers** → `86.5` hrs (estimate). **Hourly** → Kimai actuals from the **previous complete half-month**. **Calendar-billed** → the client's colour on their Google Calendar, same window. **Manual** → carried over from the previous invoice (estimate, adjusted later).
 - **Descriptions** → AI-summarized from each person's time entries in `[issue-15, issue-1]`, whatever their source. Missing/repetitive/ungeneratable → left empty + a review note. Raw Kimai or calendar text is **never** copied to the invoice; those are internal notes.
 - **Total** = calculated subtotal. The discount cell carries the previously agreed contract amount forward as an editable formula; the reviewer (Cherry) adjusts it.

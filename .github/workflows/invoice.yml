@@ -1,11 +1,14 @@
 name: DRC Invoice
 
 # Cloud scheduling — runs on GitHub's servers, no laptop needed.
-# Cron is UTC and does NOT observe DST. 17:00 UTC = 9:00 AM PST (winter).
-# (In summer / PDT that lands at 10:00 AM; change "17" to "16" if you prefer.)
+#
+# Cron is UTC and does NOT observe DST, so midnight Pacific has no single cron:
+# it is 08:00 UTC in winter (PST) and 07:00 UTC in summer (PDT). 08:00 is the safe
+# choice — midnight Pacific in winter, 1am in summer, and the 5th/20th either way.
+# 07:00 would drift to 11pm on the 4th/19th in winter, i.e. the wrong day.
 on:
   schedule:
-    - cron: "0 17 7,22 * *"   # 7th & 22nd of every month, 9am PST -> bills 1-15 / 16-EOM
+    - cron: "0 8 5,20 * *"    # 5th & 20th, 12am PST / 1am PDT -> bills 1-15 / 16-EOM
   workflow_dispatch:           # manual "Run workflow" button
     inputs:
       write:

@@ -36,10 +36,21 @@ def previous_half_month(start_iso: str) -> tuple[str, str]:
     )
 
 
-def description_window(issue_iso: str) -> tuple[str, str]:
-    """Kimai window for descriptions = [issue - 15, issue - 1] (e.g. 16-30 -> Jun 8-22)."""
+def description_window(issue_iso: str, today: date | None = None) -> tuple[str, str]:
+    """Window for descriptions = [issue - 15, issue - 1], never past today.
+
+    The run happens before the issue date, so the raw window reaches into the
+    future — and it reaches further the earlier in the month the automation runs.
+    Days that have not happened hold no time entries, so the cap costs nothing and
+    keeps the window honest about what it actually covers.
+    """
     d = datetime.strptime(issue_iso, "%Y-%m-%d").date()
-    return (d - timedelta(days=15)).isoformat(), (d - timedelta(days=1)).isoformat()
+    start = d - timedelta(days=15)
+    end = d - timedelta(days=1)
+    cap = today or date.today()
+    if end > cap >= start:  # leave a wholly-future window alone rather than invert it
+        end = cap
+    return start.isoformat(), end.isoformat()
 
 
 def is_billing_day(run_days: list[int], today: date | None = None) -> bool:

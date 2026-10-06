@@ -13,7 +13,7 @@ Examples:
     # Someone's default description window holds nothing useful (e.g. all PTO):
     python run.py --desc-window "Victor Cheung=2026-08-10:2026-08-24" --write
 
-    # Scheduled (cron / GitHub Actions): only runs on the 7th & 22nd, writes silently:
+    # Scheduled (cron / GitHub Actions): only runs on the configured days, writes silently:
     python run.py --auto --write --yes
 """
 from __future__ import annotations
@@ -116,7 +116,7 @@ def main() -> None:
                     help="Proceed even though the template tab already covers this period")
     ap.add_argument("--write", action="store_true", help="Write the new tab (default: preview only)")
     ap.add_argument("--yes", action="store_true", help="Skip the write confirmation (for scheduled runs)")
-    ap.add_argument("--auto", action="store_true", help="Only run on configured run days (7th/22nd); else exit")
+    ap.add_argument("--auto", action="store_true", help="Only run on configured run days (settings.yaml schedule.run_days); else exit")
     args = ap.parse_args()
 
     if args.auto:

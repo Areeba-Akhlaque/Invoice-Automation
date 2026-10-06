@@ -20,9 +20,11 @@ invoice:
   fixed_hours: 86.5        # the "=173/2" standard for full-time contractors
 
 # Advance-billing schedule (Cherry's model): bill 1-15 and 16-EOM, issued in
-# advance (issue = period start + 7). The automation runs the day before issue.
+# advance (issue = period start + 7). The draft is generated a few days ahead so
+# there is time to review before the issue date; the issue date itself is computed
+# from the period, so moving these days does not move it.
 schedule:
-  run_days: [7, 22]        # day-of-month the automation generates a draft
+  run_days: [5, 20]        # day-of-month the automation generates a draft
   issue_offset_days: 7     # invoice issue date = period start + this
 
 # Calendar-based hours (hours_source: calendar). Mirrors the Apps Script that

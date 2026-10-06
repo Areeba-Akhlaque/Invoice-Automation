@@ -1,6 +1,6 @@
 @echo off
 REM Local Windows Task Scheduler entry (alternative to GitHub Actions).
-REM Runs daily; --auto exits unless today is a configured run day (7th / 22nd).
+REM Runs daily; --auto exits unless today is a configured run day (see settings.yaml).
 REM Generates a draft tab (Kimai hours + fixed 86.5 + AI descriptions); you then
 REM fill James/Bradd/Keeko hours, pass-through $ amounts, and review.
 

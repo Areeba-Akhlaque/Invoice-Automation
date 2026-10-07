@@ -38,15 +38,21 @@ colour; the same events' titles feed the AI description.
     calendar_project: "Ride Care"     # a label from settings.yaml calendar.color_map
 ```
 
-This mirrors the Apps Script behind the calendar-sync sheet — same colour map,
-`end - start` durations, all-day and cancelled events skipped — and was verified
-against it event-for-event.
+Same colour map and all-day/cancelled handling as the Apps Script behind the
+calendar-sync sheet, and verified against it event-for-event. **No cap is applied
+— every hour on the calendar is billable, however long the day runs.**
 
-Two things it surfaces that a manual estimate hid:
-- **Uncoloured time is not billed to anyone.** It has run at 33-53 h per
-  half-month. `python check_setup.py` reports it every run.
-- **Overlapping events are counted twice**, exactly as the sheet does. The run
-  warns when that exceeds half an hour.
+Two deliberate differences from that sheet, both about accuracy:
+- **Double-booked time is billed once.** A 30-minute call inside a longer block
+  is the same minutes, not extra ones; the sheet sums durations and bills them
+  twice (2.33 h on one real fortnight, $467 at James's rate). The amount is
+  reported each run as `overlap_hours` so the two can be reconciled.
+- **Events are clipped to the billed window.** The Calendar API returns anything
+  overlapping it, so a block that began the night before would otherwise bill its
+  earlier hours to this invoice.
+
+Also worth watching: **uncoloured time is billed to nobody** — it has run at
+2-53 h per half-month. `python check_setup.py` reports it every run.
 
 ## `active: false`
 Someone off the project — permanently (off-boarded) or temporarily (no hours for

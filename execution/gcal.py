@@ -100,6 +100,29 @@ def parse_event(ev: dict, tz: ZoneInfo, color_map: dict, skip_all_day: bool) -> 
     )
 
 
+def clip_to_window(e: CalEvent, start: datetime, end: datetime) -> CalEvent | None:
+    """Trim an event to the requested window, or drop it if it falls outside.
+
+    The Calendar API returns everything that OVERLAPS the window, so a block that
+    began the night before the period would otherwise bill its earlier hours to
+    this invoice — and one running past the last day would bill next period's.
+    """
+    if e.end <= start or e.start >= end:
+        return None
+    if e.start >= start and e.end <= end:
+        return e
+    st, en = max(e.start, start), min(e.end, end)
+    return CalEvent(
+        day=st.date(),
+        start=st,
+        end=en,
+        summary=e.summary,
+        description=e.description,
+        minutes=round((en - st) / timedelta(minutes=1), 2),
+        project=e.project,
+    )
+
+
 class CalendarClient:
     def __init__(
         self,
@@ -147,7 +170,9 @@ class CalendarClient:
         for ev in items:
             parsed = parse_event(ev, self.tz, self.color_map, self.skip_all_day)
             if parsed is not None:
-                out.append(parsed)
+                clipped = clip_to_window(parsed, start, end)
+                if clipped is not None:
+                    out.append(clipped)
         return out
 
     # ---- what the invoice needs ----------------------------------------
@@ -158,20 +183,24 @@ class CalendarClient:
 
 @dataclass
 class CalendarPull:
-    hours: float
+    hours: float  # real elapsed time: overlapping events counted ONCE
     entries: list[str]
     event_count: int
     totals: dict[str, float]  # hours per colour label, for spotting mis-colouring
-    overlap_hours: float  # time counted twice because two events overlapped
+    overlap_hours: float  # double-booked time, excluded from `hours` (reported only)
 
 
 def summarise(events: list[CalEvent], project: str) -> CalendarPull:
     """Aggregate events for one project label.
 
-    Durations are summed as-is, exactly like the Apps Script, so overlapping
-    events are counted twice. That is reported separately rather than silently
-    corrected, so the number still reconciles with the calendar-sync sheet
-    (measured: 25 minutes across a sample fortnight, i.e. normally noise).
+    Hours are the real elapsed time: when two events sit on the same minutes —
+    a 30-minute call inside a longer block, say — that minute is billed once, not
+    twice. No cap or other policy is applied; every hour on the calendar counts.
+
+    This is where we deliberately differ from the Apps Script behind the
+    calendar-sync sheet, which sums durations and so bills double-booked time
+    twice (2.33 h on one real fortnight, $467 at James's rate). The amount is
+    reported as overlap_hours so the two can still be reconciled.
     """
     totals: dict[str, float] = {}
     for e in events:
@@ -194,12 +223,13 @@ def summarise(events: list[CalEvent], project: str) -> CalendarPull:
             seen.add(key)
             entries.append(e.entry)
 
+    wall = _wall_clock_minutes(mine)
     return CalendarPull(
-        hours=round(minutes / 60.0, 2),
+        hours=round(wall / 60.0, 2),
         entries=entries,
         event_count=len(mine),
         totals={k: round(v / 60.0, 2) for k, v in sorted(totals.items(), key=lambda x: -x[1])},
-        overlap_hours=round((minutes - _wall_clock_minutes(mine)) / 60.0, 2),
+        overlap_hours=round((minutes - wall) / 60.0, 2),
     )
 
 

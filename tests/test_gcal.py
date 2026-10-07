@@ -13,6 +13,7 @@ from execution.gcal import (
     DEFAULT_COLOR_LABEL,
     CalEvent,
     clean_description,
+    clip_to_window,
     label_for,
     parse_event,
     summarise,
@@ -117,12 +118,25 @@ def test_only_the_billable_colour_is_counted():
     assert got.totals == {"Ride Care": 1.0, "Lifestyle": 1.0}
 
 
-def test_durations_are_summed_like_the_apps_script_and_overlap_reported_separately():
-    """The sheet double-counts overlaps; we match it, but say so rather than
-    silently differing from the number the client reconciles against."""
+def test_double_booked_time_is_billed_once():
+    """A call sitting inside a longer block is the same minutes, not extra ones.
+    The Apps Script sums durations and bills them twice; we bill the real elapsed
+    time and report the difference so the two can be reconciled."""
     got = summarise([ev(9, 0, 10, 0), ev(9, 30, 10, 30)], "Ride Care")
-    assert got.hours == 2.0  # 60 + 60, as the sheet reports
-    assert got.overlap_hours == 0.5  # 9:30-10:00
+    assert got.hours == 1.5  # 09:00-10:30 actually elapsed
+    assert got.overlap_hours == 0.5  # 09:30-10:00, excluded from `hours`
+
+
+def test_an_event_wholly_inside_another_adds_nothing():
+    got = summarise([ev(9, 0, 17, 0), ev(10, 0, 11, 0)], "Ride Care")
+    assert got.hours == 8.0
+    assert got.overlap_hours == 1.0
+
+
+def test_no_cap_is_applied_however_long_the_day_runs():
+    """Policy decision: every hour on the calendar is billable, no daily limit."""
+    got = summarise([ev(6, 0, 23, 30)], "Ride Care")
+    assert got.hours == 17.5
 
 
 def test_adjacent_events_are_not_treated_as_overlapping():
@@ -170,3 +184,44 @@ def test_no_events_is_zero_not_an_error():
 @pytest.mark.parametrize("project", ["Pvragon", "Nonexistent"])
 def test_a_person_with_no_time_in_their_project_gets_zero(project):
     assert summarise([ev(9, 0, 10, 0)], project).hours == 0.0
+
+
+# --------------------------------------------------------------------------
+# Clipping to the billed window
+# --------------------------------------------------------------------------
+WIN_S = datetime(2026, 9, 16, 0, 0, tzinfo=TZ)
+WIN_E = datetime(2026, 9, 30, 23, 59, 59, 999999, tzinfo=TZ)
+
+
+def _at(d1, h1, m1, d2, h2, m2):
+    s = datetime(2026, 9, d1, h1, m1, tzinfo=TZ)
+    e = datetime(2026, 9, d2, h2, m2, tzinfo=TZ)
+    return CalEvent(s.date(), s, e, "Block", "", (e - s) / timedelta(minutes=1), "Ride Care")
+
+
+def test_an_event_inside_the_window_is_untouched():
+    e = _at(20, 9, 0, 20, 17, 0)
+    assert clip_to_window(e, WIN_S, WIN_E) is e
+
+
+def test_a_block_starting_before_the_window_is_trimmed():
+    """It began the night before the period; those hours belong to the previous
+    invoice, not this one."""
+    got = clip_to_window(_at(15, 22, 0, 16, 2, 0), WIN_S, WIN_E)
+    assert got.start == WIN_S
+    assert got.minutes == 120.0  # only the 2 hours after midnight on the 16th
+
+
+def test_a_block_running_past_the_window_is_trimmed():
+    got = clip_to_window(_at(30, 22, 0, 30, 23, 0), WIN_S, WIN_E)
+    assert got.minutes == 60.0
+    longer = clip_to_window(_at(30, 23, 0, 30, 23, 59), WIN_S, WIN_E)
+    assert longer.minutes == 59.0
+
+
+def test_an_event_wholly_outside_the_window_is_dropped():
+    assert clip_to_window(_at(14, 9, 0, 14, 17, 0), WIN_S, WIN_E) is None  # before
+    after = datetime(2026, 10, 2, 9, 0, tzinfo=TZ)
+    later = datetime(2026, 10, 2, 17, 0, tzinfo=TZ)
+    e = CalEvent(after.date(), after, later, "Block", "", 480.0, "Ride Care")
+    assert clip_to_window(e, WIN_S, WIN_E) is None  # after

@@ -54,6 +54,14 @@ Two deliberate differences from that sheet, both about accuracy:
 Also worth watching: **uncoloured time is billed to nobody** — it has run at
 2-53 h per half-month. `python check_setup.py` reports it every run.
 
+## `carry_description: true`
+For someone with no time source to summarise from, whose project line does not
+really change — Bradd, until his calendar is coloured. The run writes nothing to
+their project cell, so the duplicated tab keeps the text it already has, and the
+cell is not flagged. Without this flag a person with no source has their cell
+emptied and noted every invoice, which is the right default: better an obvious
+gap than months-old text passing as current.
+
 ## `active: false`
 Someone off the project — permanently (off-boarded) or temporarily (no hours for
 now). They get no line item, and if their row still exists on the copied tab it is

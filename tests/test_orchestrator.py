@@ -255,3 +255,37 @@ def test_a_backwards_hours_window_is_refused():
 def test_shell_metacharacters_in_a_date_are_just_an_invalid_date():
     """Workflow inputs reach argv, never a shell — this must read as a bad date."""
     assert "YYYY-MM-DD" in _prepare_fails(start="2026-10-01; rm -rf /", end="2026-10-15")
+
+
+def test_carry_description_leaves_the_cell_alone_without_flagging(monkeypatch):
+    """Someone with no time source would otherwise have their project cell
+    emptied and flagged every invoice — pure manual work for a line that does not
+    change. Writing nothing means the duplicated tab keeps its text."""
+    import orchestration.orchestrator as orch
+
+    monkeypatch.setattr(orch, "load_gemini_key", lambda: "key")
+    monkeypatch.setattr(orch, "GeminiSummarizer", lambda *a, **k: _PartialSummarizer())
+    monkeypatch.setattr(orch, "load_roster", lambda: [
+        {"name": "A", "_key": "a", "active": True, "hours_source": "calendar"},
+        {"name": "Bradd", "_key": "bradd", "active": True, "hours_source": "manual",
+         "kimai_user_id": 4, "carry_description": True},
+    ])
+    descriptions, flags = orch.build_descriptions(None, "x", "y", {}, {"a": ["Echo1 Lead Sync"]}, [])
+    assert "A" in descriptions
+    assert "Bradd" not in descriptions  # nothing written -> cell keeps its text
+    assert flags == {}                  # and no review note
+
+
+def test_without_carry_description_a_sourceless_person_is_still_flagged(monkeypatch):
+    """The default stays honest: no source and no opt-out means the cell is
+    emptied and noted rather than quietly showing months-old text."""
+    import orchestration.orchestrator as orch
+
+    monkeypatch.setattr(orch, "load_gemini_key", lambda: "key")
+    monkeypatch.setattr(orch, "GeminiSummarizer", lambda *a, **k: _PartialSummarizer())
+    monkeypatch.setattr(orch, "load_roster", lambda: [
+        {"name": "A", "_key": "a", "active": True, "hours_source": "calendar"},
+        {"name": "Nobody", "_key": "nobody", "active": True, "hours_source": "manual"},
+    ])
+    _d, flags = orch.build_descriptions(None, "x", "y", {}, {"a": ["Echo1 Lead Sync"]}, [])
+    assert "no time-tracking source" in flags["Nobody"]

@@ -154,6 +154,12 @@ def build_descriptions(
     for p in roster:
         if not p.get("active", True):  # off the project -> no description needed
             continue
+        if p.get("carry_description"):
+            # No time source to summarise, and the line is stable enough that
+            # emptying the cell every invoice would be pure manual work. Write
+            # nothing: the duplicated tab keeps the text it already has.
+            say(f"  {p['name']}: project cell left as-is (carry_description in roster.yaml)")
+            continue
         if p["hours_source"] == "calendar":
             entries, source = (calendar_entries or {}).get(p["_key"]) or [], "calendar"
         elif p.get("kimai_user_id"):

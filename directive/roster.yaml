@@ -129,3 +129,7 @@ laborers:
     hours_source: manual
     calendar_id: "bradd@pvragon.com"
     kimai_user_id: 4         # no Kimai entries either
+    # Nothing to summarise from, and his line does not really change, so leave
+    # the project cell alone rather than blanking it and asking for a review
+    # every fortnight. Drop this once his calendar is coloured.
+    carry_description: true

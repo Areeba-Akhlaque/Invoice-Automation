@@ -126,6 +126,19 @@ laborers:
   # colour it; once he does, switch hours_source to calendar and set
   # calendar_project to his client's label. Until then he stays manual and his
   # description cell is flagged for review rather than left stale.
+  # Onboarded 2026-10. $6,000/month, which over the 173 h this invoice bills
+  # (86.5 x 2) is 34.6821/h of cost; the sheet applies Cherry's 20% markup on its
+  # row, so the client sees $41.62. cfg_laborers holds it as =6000/173 so the cell
+  # says where it came from.
+  # NO kimai_projects override on purpose: his hours are fixed, and his
+  # descriptions must come from Ride Care work only — not onboarding time logged
+  # under Pvragon. Until he logs Ride Care work his project cell is flagged.
+  - name: "Pablo Mejia"      # MUST match column B of the invoice tab exactly
+    base_rate: 34.6821
+    markup: 1.2
+    hours_source: fixed
+    kimai_user_id: 43        # Kimai alias "Pablo"
+
   - name: "Bradd Schofield"
     base_rate: 125
     markup: 1.0

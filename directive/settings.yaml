@@ -77,10 +77,10 @@ layout:
   # if the tab has drifted (row 16 is the header, 34+ are the totals block).
   # These follow the tab: resolve_layout re-detects them if rows are added or
   # removed, warns, and carries on — keep them current anyway so the warning stops.
-  line_items_scan_rows: [17, 29]
-  subtotal_cell: "F31"             # =SUM(F17:F29)
-  discount_cell: "F32"             # =F31-<contract amount>
-  total_cell: "D34"                # =F31-F32 (next to the TOTAL label in D33)
+  line_items_scan_rows: [17, 30]
+  subtotal_cell: "F32"             # =SUM(F17:F30)
+  discount_cell: "F33"             # =F32-<contract amount>
+  total_cell: "D35"                # =F32-F33 (next to the TOTAL label in D34)
 
 # Pass-through / third-party rows are detected from the tab itself: any named row
 # in the billable range that is not a roster person keeps its carried amount unless

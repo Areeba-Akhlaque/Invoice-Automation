@@ -173,6 +173,40 @@ class SheetsClient:
         )
         self._meta_cache = None
 
+    def insert_rows(self, title: str, before_row: int, count: int = 1):
+        """Insert blank rows above `before_row` (1-based), inheriting its formatting.
+
+        Everything below shifts down and the sheet rewrites its own ranges, so a
+        =SUM() spanning the insert point widens to include the new row.
+        resolve_layout picks the new geometry up; settings.yaml should still be
+        corrected so the warning stops.
+        """
+        sid = self.sheet_id(title)
+        _retry(
+            lambda: self.svc.spreadsheets()
+            .batchUpdate(
+                spreadsheetId=self.sid,
+                body={
+                    "requests": [
+                        {
+                            "insertDimension": {
+                                "range": {
+                                    "sheetId": sid,
+                                    "dimension": "ROWS",
+                                    "startIndex": before_row - 1,
+                                    "endIndex": before_row - 1 + count,
+                                },
+                                "inheritFromBefore": True,
+                            }
+                        }
+                    ]
+                },
+            )
+            .execute(),
+            what=f"insert {count} row(s) at {title}!{before_row}",
+        )
+        self._meta_cache = None
+
     def delete_rows(self, title: str, rows: list[int]):
         """Delete whole rows (1-based) from a tab.
 

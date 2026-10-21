@@ -210,8 +210,13 @@ def validate_layout(sheets, tab: str, lay: dict, prefix: str) -> list[str]:
             f"{[int(m.group(1)), int(m.group(2))]} in {lay['subtotal_cell']}"
         )
 
-    disc = formula_of(lay["discount_cell"])
-    if lay["subtotal_cell"].upper() not in disc.upper():
+    # A blank or zero discount is exactly what we write when there is no agreed
+    # contract amount, so rejecting it would deadlock the next run on our own
+    # output. Only a non-zero value that ignores the subtotal is suspect.
+    disc = formula_of(lay["discount_cell"]).strip()
+    if disc not in ("", "0") and _arithmetic_value(disc) != 0 and (
+        lay["subtotal_cell"].upper() not in disc.upper()
+    ):
         problems.append(
             f"discount_cell {lay['discount_cell']} does not reference "
             f"{lay['subtotal_cell']} (found: {disc!r})"
@@ -323,7 +328,7 @@ def next_invoice_number(num: int, prefix: str, pad: int) -> str:
     return f"{prefix}-{num + 1:0{pad}d}"
 
 
-def _arithmetic_value(expr: str) -> float | None:
+def _arithmetic_value(expr: str, allow_negative: bool = False) -> float | None:
     """Evaluate a plain arithmetic expression like '115250/2' or '(57625)'.
 
     Reviewers write the contract amount the way they think about it — a monthly
@@ -341,7 +346,9 @@ def _arithmetic_value(expr: str) -> float | None:
     if not isinstance(value, int | float) or isinstance(value, bool):
         return None
     value = float(value)
-    if value <= 0 or value != value or value in (float("inf"), float("-inf")):
+    if value != value or value in (float("inf"), float("-inf")):
+        return None
+    if not allow_negative and value <= 0:
         return None
     return round(value, 2)
 
@@ -350,10 +357,14 @@ def parse_carried_cap(discount_formula: str, subtotal_cell: str) -> float | None
     """Read the agreed contract amount out of the previous discount formula.
 
     The shape is '<subtotal> - <contract amount>', where the amount may be a
-    number or a small arithmetic expression: '=F34-51188', '=(SUM(F17:F32)-51188)'
-    and '=F34-(115250/2)' all mean the same thing to a reviewer. A bare number,
-    a cell reference, or anything else returns None rather than a wrong cap —
-    a misread here silently rewrites the invoice total.
+    number, a small arithmetic expression, or several subtracted terms:
+    '=F34-51188', '=F34-(115250/2)' and '=F31-(113500/2)-5000' are all a reviewer
+    writing down the same kind of thing. The tail is evaluated WITH its signs and
+    negated, so a chain reads as the sum of what was subtracted — F31-56750-5000
+    is a contract of 61,750, not 51,750.
+
+    Anything that does not reduce to a single positive number returns None rather
+    than a guess: a misread here silently rewrites the invoice total.
     """
     txt = str(discount_formula or "").replace(",", "").strip()
     pat = rf"^=\s*\(?\s*(?:SUM\([^)]*\)|{re.escape(subtotal_cell)})\s*-\s*(.+?)\s*$"
@@ -364,21 +375,10 @@ def parse_carried_cap(discount_formula: str, subtotal_cell: str) -> float | None
     # '=(SUM(...)-51188)' wraps the whole thing; drop that one trailing bracket.
     if txt.lstrip("=").lstrip().startswith("(") and rest.endswith(")") and rest.count("(") < rest.count(")"):
         rest = rest[:-1]
-    rest = rest.strip()
-
-    # The amount must be ONE term: a bare number, or a single bracketed group.
-    # A trailing term instead belongs to the subtraction — '=F34-51188-500' means
-    # F34 minus 51,688, not minus 50,688 — so refuse it rather than invert a sign.
-    if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", rest):
-        return _arithmetic_value(rest)
-    if not (rest.startswith("(") and rest.endswith(")")):
-        return None
-    depth = 0
-    for i, ch in enumerate(rest):
-        depth += (ch == "(") - (ch == ")")
-        if depth == 0 and i < len(rest) - 1:
-            return None  # brackets close early, so something follows the group
-    return _arithmetic_value(rest)
+    # Evaluate the tail as it appears after the minus sign, then flip it back:
+    # '-(113500/2)-5000' -> -61750 -> a contract amount of 61750.
+    value = _arithmetic_value("-" + rest.strip(), allow_negative=True)
+    return None if value is None or -value <= 0 else round(-value, 2)
 
 
 def build_plan(
@@ -421,8 +421,9 @@ def build_plan(
         if not allow_duplicate_period:
             raise RuntimeError(msg + "\nUse --allow-duplicate-period if this is intentional.")
 
+    carried_cap = None
     if cap is None:
-        cap = parse_carried_cap(snap.discount_formula, lay["subtotal_cell"])
+        carried_cap = cap = parse_carried_cap(snap.discount_formula, lay["subtotal_cell"])
 
     kimai_by_id: dict[int, float] = {}
     kimai_by_name: dict[str, float] = {}
@@ -539,6 +540,24 @@ def build_plan(
             plan.warnings.append(
                 f"passthrough '{name}': no row with that name in '{template_tab}' — will not be written"
             )
+
+    # A cap above the subtotal makes the discount negative, i.e. it ADDS money and
+    # bills more than the work. Carrying one forward is a convenience, so drop it
+    # when it cannot apply and say so; an explicit --cap is the reviewer's call and
+    # is only warned about.
+    if plan.cap is not None and plan.cap > plan.subtotal:
+        note = (
+            f"contract amount ${plan.cap:,.2f} is ABOVE this invoice's subtotal "
+            f"${plan.subtotal:,.2f}, so no discount applies"
+        )
+        if carried_cap is not None and plan.cap == carried_cap:
+            plan.cap = None
+            plan.warnings.append(
+                f"{note} — not carrying it over from '{template_tab}'; set the "
+                f"contract amount on the new tab if one was agreed"
+            )
+        else:
+            plan.warnings.append(f"{note} — the discount cell will be NEGATIVE")
 
     return plan
 

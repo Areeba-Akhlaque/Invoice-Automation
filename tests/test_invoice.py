@@ -41,6 +41,15 @@ SUBTOTAL = "F34"
         ("=(SUM(F17:F32)-(115250/2))", 57625.0),
         ("=F34-(50000+7625)", 57625.0),
         ("=F34-(57625)", 57625.0),
+        # Several subtracted terms are unambiguous: the discount is the sum of
+        # them, so the contract is too. This shape appeared on DRC-0067 and
+        # produced no cap at all, which left the next invoice with no discount.
+        ("=F34-(113500/2)-5000", 61750.0),
+        ("=F34-51188-500", 51688.0),
+        ("=F34-50000-1188-500", 51688.0),
+        # Mixed signs still reduce to one amount: F34 - 51,188 + 500 is F34 less
+        # 50,688, so that is the contract.
+        ("=F34-51188+500", 50688.0),
     ],
 )
 def test_parse_carried_cap_accepts_the_shapes_we_write(formula, expected):
@@ -57,10 +66,8 @@ def test_parse_carried_cap_accepts_the_shapes_we_write(formula, expected):
         "=F34-F35",          # reference, not a number
         "=SUM(F17:F32)-F41",
         "=OTHER-51188",      # not our subtotal cell
-        # '=F34-51188-500' means F34 minus 51,688 -- reading the tail as part of
-        # the amount would give 50,688 and overstate the invoice by $1,000.
-        "=F34-51188-500",
-        "=F34-(115250/2)-500",
+        # Adding a term back is not a discount at all, so there is no contract
+        # amount to read: F34 - 500 + 57,625 is MORE than the subtotal.
         "=F34-500+(115250/2)",
         "=F34-(115250/0)",   # division by zero
         "=F34-(-5000)",      # a negative contract amount is meaningless
@@ -353,3 +360,18 @@ def test_resolve_layout_refuses_a_tab_it_cannot_read():
     """Writing into guessed cells would corrupt a client invoice."""
     with pytest.raises(RuntimeError, match="does not match"):
         resolve_layout(ColumnSheets({"F5": "DRC-0065"}), "DRC-0065", LAYOUT, "DRC")
+
+
+# --------------------------------------------------------------------------
+# A discount cell we wrote ourselves must not deadlock the next run
+# --------------------------------------------------------------------------
+def test_a_zero_discount_is_a_valid_state():
+    """write_plan puts a literal 0 there when no contract amount is known, so
+    rejecting it would stop the next invoice on our own output."""
+    assert validate_layout(_good_sheet(F35="0"), "DRC-0065", LAYOUT, "DRC") == []
+    assert validate_layout(_good_sheet(F35=""), "DRC-0065", LAYOUT, "DRC") == []
+
+
+def test_a_nonzero_discount_ignoring_the_subtotal_is_still_a_problem():
+    problems = validate_layout(_good_sheet(F35="-2500"), "DRC-0065", LAYOUT, "DRC")
+    assert any("discount_cell" in p for p in problems)

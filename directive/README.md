@@ -54,6 +54,21 @@ Two deliberate differences from that sheet, both about accuracy:
 Also worth watching: **uncoloured time is billed to nobody** — it has run at
 2-53 h per half-month. `python check_setup.py` reports it every run.
 
+## Kimai project filter
+This invoice bills one client's work, but people log time against more than one
+project (Ride Care and Pvragon, 2110 h and 835 h over Sep-Oct). `kimai.project`
+in `settings.yaml` names the one being invoiced, so another client's hours and
+descriptions cannot land on it.
+
+A person whose billable work sits under a different project overrides it:
+
+```yaml
+    kimai_projects: ["Pvragon", "Ride Care"]   # Dana: the SW1045 bid work
+```
+
+Their time is pulled separately with their own filter, and a name that is not a
+Kimai project stops the run rather than quietly billing nothing.
+
 ## `carry_description: true`
 For someone with no time source to summarise from, whose project line does not
 really change — Bradd, until his calendar is coloured. The run writes nothing to

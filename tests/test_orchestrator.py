@@ -289,3 +289,75 @@ def test_without_carry_description_a_sourceless_person_is_still_flagged(monkeypa
     ])
     _d, flags = orch.build_descriptions(None, "x", "y", {}, {"a": ["Echo1 Lead Sync"]}, [])
     assert "no time-tracking source" in flags["Nobody"]
+
+
+# --------------------------------------------------------------------------
+# Kimai project filter: this invoice bills one client's work
+# --------------------------------------------------------------------------
+class _FakeKimai:
+    """Two projects, as the real Kimai has: Ride Care (3) and Pvragon (1)."""
+
+    PROJECTS = [{"id": 3, "name": "Ride Care"}, {"id": 1, "name": "Pvragon"}]
+    ROWS = [
+        {"user": 9, "project": 3, "duration": 3600, "description": "ride care work"},
+        {"user": 35, "project": 1, "duration": 7200, "description": "sw1045 bid work"},
+        {"user": 35, "project": 3, "duration": 1800, "description": "a ride care call"},
+    ]
+
+    def projects(self):
+        return self.PROJECTS
+
+    def project_id(self, name):
+        want = name.strip().lower()
+        return next((p["id"] for p in self.PROJECTS if p["name"].lower() == want), None)
+
+    def timesheets(self, begin, end, user="all", size=500, project=None):
+        want = {project} if isinstance(project, int) else project
+        rows = self.ROWS
+        if user != "all":
+            rows = [r for r in rows if r["user"] == int(user)]
+        if want:
+            rows = [r for r in rows if r["project"] in want]
+        return rows
+
+    def descriptions_by_user(self, begin, end, user_id=None, project=None):
+        out = {}
+        for r in self.timesheets(begin, end, str(user_id) if user_id else "all", project=project):
+            if r["description"]:
+                out.setdefault(r["user"], []).append(r["description"])
+        return out
+
+
+def test_another_clients_time_is_not_billed_to_this_invoice():
+    """People log against more than one project; only the invoiced one counts."""
+    k = _FakeKimai()
+    rows = k.timesheets("a", "b", project=k.project_id("Ride Care"))
+    assert {r["project"] for r in rows} == {3}
+    assert all(r["description"] != "sw1045 bid work" for r in rows)
+
+
+def test_a_person_can_bill_from_a_second_project():
+    """Dana's billable work sits under 'Pvragon' but is invoiced to DRC, so her
+    roster entry overrides the default filter."""
+    k = _FakeKimai()
+    ids = {k.project_id("Pvragon"), k.project_id("Ride Care")}
+    rows = k.timesheets("a", "b", user="35", project=ids)
+    assert round(sum(r["duration"] for r in rows) / 3600, 2) == 2.5
+    descs = k.descriptions_by_user("a", "b", user_id=35, project=ids)[35]
+    assert "sw1045 bid work" in descs
+
+
+def test_an_unknown_project_name_is_refused_rather_than_billing_nothing():
+    from orchestration.orchestrator import _resolve_projects
+
+    with pytest.raises(RuntimeError, match="not a project in Kimai"):
+        _resolve_projects(_FakeKimai(), ["Typo Project"])
+
+
+def test_kimai_projects_is_normalised_to_a_list():
+    """A single name in roster.yaml must not be iterated character by character."""
+    from execution.config import load_roster
+
+    for p in load_roster():
+        if p.get("kimai_projects") is not None:
+            assert isinstance(p["kimai_projects"], list), p["name"]

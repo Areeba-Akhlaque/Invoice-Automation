@@ -47,6 +47,13 @@ calendar:
     10: "MtG"
     11: "[Tomato]"
 
+# Kimai: this invoice bills ONE client's work, but people log time against more
+# than one project (Ride Care 2110 h and Pvragon 835 h over Sep-Oct). Without
+# this filter another client's hours and descriptions would land on the invoice.
+# Leave blank to take every project, as it used to.
+kimai:
+  project: "Ride Care"
+
 gemini:
   model: "gemini-2.5-flash-lite"   # free-tier model (higher daily quota than 2.5-flash)
   request_delay_seconds: 8         # gap between calls when not batching

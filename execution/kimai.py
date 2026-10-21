@@ -52,8 +52,27 @@ class KimaiClient:
     def users(self) -> list[dict]:
         return self._get("/users")
 
-    def timesheets(self, begin: str, end: str, user: str = "all", size: int = 500) -> list[dict]:
-        """begin/end are ISO local datetimes: 'YYYY-MM-DDTHH:MM:SS'."""
+    def projects(self) -> list[dict]:
+        return self._get("/projects")
+
+    def project_id(self, name: str) -> int | None:
+        """Resolve a project name to its id, case/space-insensitively."""
+        want = " ".join(str(name).split()).strip().lower()
+        for pr in self.projects():
+            if " ".join(str(pr.get("name") or "").split()).strip().lower() == want:
+                return pr.get("id")
+        return None
+
+    def timesheets(self, begin: str, end: str, user: str = "all", size: int = 500,
+                   project: int | set[int] | None = None) -> list[dict]:
+        """begin/end are ISO local datetimes: 'YYYY-MM-DDTHH:MM:SS'.
+
+        project keeps only time logged against those project ids. This invoice
+        bills one client's work and people log against more than one, so without
+        it another client's hours and descriptions land on the invoice. Some
+        people legitimately bill from a second project, hence a set.
+        """
+        want = {project} if isinstance(project, int) else project
         rows: list[dict] = []
         page = 1
         while True:
@@ -69,17 +88,26 @@ class KimaiClient:
                 raise
             if not batch:
                 break
+            if want:
+                batch_all = batch
+                batch = [t for t in batch_all if t.get("project") in want]
+                rows.extend(batch)
+                if len(batch_all) < size:
+                    break
+                page += 1
+                continue
             rows.extend(batch)
             if len(batch) < size:
                 break
             page += 1
         return rows
 
-    def hours_with_identity(self, begin: str, end: str) -> list[dict]:
+    def hours_with_identity(self, begin: str, end: str,
+                            project: int | set[int] | None = None) -> list[dict]:
         """Returns [{id, username, alias, hours}] aggregated over the period."""
         id_map = {u["id"]: u for u in self.users()}
         seconds: dict[int, float] = {}
-        for t in self.timesheets(begin, end):
+        for t in self.timesheets(begin, end, project=project):
             uid = t.get("user")
             seconds[uid] = seconds.get(uid, 0) + (t.get("duration") or 0)
 
@@ -97,7 +125,8 @@ class KimaiClient:
         return rows
 
     def descriptions_by_user(
-        self, begin: str, end: str, user_id: int | None = None
+        self, begin: str, end: str, user_id: int | None = None,
+        project: int | set[int] | None = None
     ) -> dict[int, list[str]]:
         """Returns {user_id: [entry descriptions]} for the period (non-empty only).
 
@@ -105,7 +134,8 @@ class KimaiClient:
         otherwise pull every user's timesheets to read a single person's).
         """
         out: dict[int, list[str]] = {}
-        for t in self.timesheets(begin, end, user=str(user_id) if user_id else "all"):
+        for t in self.timesheets(begin, end, user=str(user_id) if user_id else "all",
+                                 project=project):
             desc = (t.get("description") or "").strip()
             if desc:
                 out.setdefault(t.get("user"), []).append(desc)

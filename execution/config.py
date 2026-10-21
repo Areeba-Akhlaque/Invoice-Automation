@@ -33,6 +33,12 @@ def load_roster() -> list[dict]:
         person["_key"] = _normalize_name(person["name"])
         person["bill_rate"] = round(person["base_rate"] * person.get("markup", 1.0), 4)
         person["active"] = person.get("active", True)  # active:false -> off the project
+        # kimai_projects overrides settings.yaml kimai.project for this person —
+        # someone whose billable work sits under a different project name.
+        if person.get("kimai_projects") is not None and not isinstance(
+            person["kimai_projects"], list
+        ):
+            person["kimai_projects"] = [person["kimai_projects"]]
     return roster
 
 

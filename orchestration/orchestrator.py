@@ -87,6 +87,20 @@ def unknown_names(names, roster) -> list[str]:
     return [n for n in names if _normalize_name(n) not in keys]
 
 
+def _resolve_projects(kimai: KimaiClient, names: list[str]) -> set[int]:
+    """Project names -> ids, refusing a typo rather than silently billing nothing."""
+    ids = set()
+    for name in names:
+        pid = kimai.project_id(name)
+        if pid is None:
+            raise RuntimeError(
+                f"kimai_projects entry {name!r} in roster.yaml is not a project in Kimai: "
+                f"{[p.get('name') for p in kimai.projects()]}"
+            )
+        ids.add(pid)
+    return ids
+
+
 def _check_date(value: str, label: str) -> None:
     """A bad date must stop the run, not reach the sheet as a header cell."""
     try:
@@ -107,6 +121,8 @@ def build_descriptions(
     desc_windows: dict[str, tuple[str, str]] | None = None,
     calendar_entries: dict[str, list[str]] | None = None,
     log: list[str] | None = None,
+    kimai_project: int | None = None,
+    project_overrides: dict[int, set[int]] | None = None,
 ) -> tuple[dict, dict]:
     """Returns (descriptions, flags). Flags = {name: reason} for a description we
     could not write (left empty + review note). One batched Gemini call.
@@ -127,7 +143,12 @@ def build_descriptions(
         say(f"  ! Descriptions skipped: {e}")
         return {}, {}
 
-    by_user = kimai.descriptions_by_user(begin, finish) if kimai else {}
+    by_user = kimai.descriptions_by_user(begin, finish, project=kimai_project) if kimai else {}
+    # Same override as the hours: their work is under another project name.
+    for uid, ids in (project_overrides or {}).items():
+        if kimai:
+            own = kimai.descriptions_by_user(begin, finish, user_id=uid, project=ids)
+            by_user[uid] = own.get(uid) or []
 
     roster = load_roster()
     for key, (w_start, w_end) in (desc_windows or {}).items():
@@ -141,7 +162,7 @@ def build_descriptions(
             continue
         uid = person["kimai_user_id"]
         custom = kimai.descriptions_by_user(
-            f"{w_start}T00:00:00", f"{w_end}T23:59:59", user_id=uid
+            f"{w_start}T00:00:00", f"{w_end}T23:59:59", user_id=uid, project=kimai_project
         )
         by_user[uid] = custom.get(uid) or []
         say(
@@ -376,12 +397,45 @@ def prepare(opts) -> InvoiceRun:
 
     kimai = None
     kimai_rows = None
+    kimai_project = None
+    desc_project_overrides: dict[int, set[int]] = {}
     if not g("no_kimai"):
         env = load_kimai_env()
         kimai = KimaiClient(env["url"], env["token"], env["user"], env["verify_ssl"])
+        want = (settings.get("kimai") or {}).get("project")
+        if want:
+            kimai_project = kimai.project_id(want)
+            if kimai_project is None:
+                raise RuntimeError(
+                    f"kimai.project {want!r} in directive/settings.yaml is not a project in "
+                    f"Kimai: {[p.get('name') for p in kimai.projects()]}"
+                )
+            log.append(f"Kimai project filter: {want!r} (id {kimai_project})")
         kimai_rows = kimai.hours_with_identity(
-            f"{hours_window[0]}T00:00:00", f"{hours_window[1]}T23:59:59"
+            f"{hours_window[0]}T00:00:00", f"{hours_window[1]}T23:59:59", project=kimai_project
         )
+        # Anyone whose billable work sits under a different project needs their
+        # own pull: the default filter above would drop all of it.
+        overrides = {
+            p["kimai_user_id"]: p
+            for p in roster
+            if p["active"] and p.get("kimai_projects") and p.get("kimai_user_id")
+        }
+        for uid, person in overrides.items():
+            ids = _resolve_projects(kimai, person["kimai_projects"])
+            rows = kimai.timesheets(
+                f"{hours_window[0]}T00:00:00", f"{hours_window[1]}T23:59:59",
+                user=str(uid), project=ids,
+            )
+            hours = round(sum((t.get("duration") or 0) for t in rows) / 3600.0, 2)
+            kimai_rows = [r for r in kimai_rows if r["id"] != uid]
+            kimai_rows.append({"id": uid, "username": person["name"], "alias": None,
+                               "hours": hours})
+            log.append(
+                f"  Kimai {person['name']}: {hours:g} h from "
+                f"{person['kimai_projects']} ({len(rows)} entries)"
+            )
+            desc_project_overrides[uid] = ids
         log.append(
             f"Hours window (hourly estimate): {hours_window[0]} -> {hours_window[1]}  "
             f"({len(kimai_rows)} users)"
@@ -405,6 +459,8 @@ def prepare(opts) -> InvoiceRun:
             desc_windows,
             calendar_entries,
             log,
+            kimai_project,
+            desc_project_overrides,
         )
 
     plan = build_plan(

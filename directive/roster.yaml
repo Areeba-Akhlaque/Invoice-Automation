@@ -67,12 +67,15 @@ laborers:
     hours_source: kimai
     kimai_user_id: 29        # alias "Alex"
 
+  # Her billable work (the SW1045 bid work) is logged under the "Pvragon" project
+  # in Kimai, not "Ride Care", but it is billed to DRC — so she needs her own
+  # project filter, otherwise settings.yaml's default drops all of it.
   - name: "Dana Hette"
     base_rate: 120
     markup: 1.2
     hours_source: kimai
     kimai_user_id: 35        # Kimai username "Dana Hettè"
-    active: false          # temporarily off the project (no hours) - flip to true when back
+    kimai_projects: ["Pvragon", "Ride Care"]
 
   - name: "JP Casabianca"
     base_rate: 49          # confirmed 2026-09; 49 * 1.2 = 58.80 on the sheet

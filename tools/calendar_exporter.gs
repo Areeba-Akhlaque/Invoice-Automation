@@ -2,6 +2,9 @@
  *
  * Two fixes over the original, both about over-counting hours:
  *
+ *  0. DAY BOUNDARY AT 4AM. A working day runs 4am to 4am, so an evening block
+ *     finishing at 1:30am counts against that evening, not the next day.
+ *
  *  1. CLIP TO THE WINDOW. Calendar.Events.list returns every event that
  *     OVERLAPS the range, and the original counted each one's full duration.
  *     A block running 15 Oct 9:30pm -> 16 Oct 1:30am therefore put all 4 hours
@@ -25,6 +28,10 @@ const SKIP_ALL_DAY_EVENTS = true;   // skip Home / trips / OOO (1440+ min noise)
 const SKIP_CANCELLED      = true;
 const DEFAULT_COLOR_LABEL = "No Color (default)";
 const BILLABLE_CATEGORY   = "Ride Care";
+// Where one working day ends. Work past midnight belongs to the day it started
+// on, so 4am: an evening block running to 1:30am is that evening's work. The
+// window therefore runs 4am on the first date to 4am the morning AFTER the last.
+const DAY_START_HOUR      = 4;
 const TOTALS_SHEET_NAME   = "Ridecare Hours";
 /********************/
 
@@ -44,8 +51,10 @@ function getCalendarEvents() {
     return;
   }
 
-  const startDate = new Date(startVal); startDate.setHours(0, 0, 0, 0);
-  const endDate   = new Date(endVal);   endDate.setHours(23, 59, 59, 999);
+  const startDate = new Date(startVal); startDate.setHours(DAY_START_HOUR, 0, 0, 0);
+  const endDate   = new Date(endVal);
+  endDate.setDate(endDate.getDate() + 1);
+  endDate.setHours(DAY_START_HOUR, 0, 0, 0);
   const winStart  = startDate.getTime();
   const winEnd    = endDate.getTime();
 
@@ -97,8 +106,13 @@ function getCalendarEvents() {
     summedMs[category] = (summedMs[category] || 0) + (ce - cs);
     (spans[category] = spans[category] || []).push([cs, ce]);
 
+    // Label the row with the WORKING day: before the boundary it is still the
+    // previous date, so 1:30am work shows under the evening it came from.
+    const workDay = new Date(cs);
+    if (workDay.getHours() < DAY_START_HOUR) workDay.setDate(workDay.getDate() - 1);
+
     out.push([
-      Utilities.formatDate(start, TIMEZONE, "EEE MMM dd yyyy"),
+      Utilities.formatDate(workDay, TIMEZONE, "EEE MMM dd yyyy"),
       ev.summary || "(no title)",
       Utilities.formatDate(start, TIMEZONE, "h:mm a"),   // exact start from the calendar
       Utilities.formatDate(end,   TIMEZONE, "h:mm a"),   // exact end from the calendar

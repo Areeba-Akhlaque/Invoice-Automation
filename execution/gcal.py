@@ -75,7 +75,15 @@ def label_for(color_id, color_map: dict) -> str:
     return color_map.get(str(color_id).strip(), "Unknown")
 
 
-def parse_event(ev: dict, tz: ZoneInfo, color_map: dict, skip_all_day: bool) -> CalEvent | None:
+def work_day(moment: datetime, day_start_hour: int = 0):
+    """The working day a moment belongs to: before the boundary it is still the
+    previous date, so 1:30am work shows under the evening it came from."""
+    d = moment.date()
+    return d - timedelta(days=1) if moment.hour < day_start_hour else d
+
+
+def parse_event(ev: dict, tz: ZoneInfo, color_map: dict, skip_all_day: bool,
+                day_start_hour: int = 0) -> CalEvent | None:
     """One Calendar API item -> CalEvent, or None if it should not be billed."""
     if ev.get("status") == "cancelled":
         return None
@@ -90,7 +98,7 @@ def parse_event(ev: dict, tz: ZoneInfo, color_map: dict, skip_all_day: bool) -> 
         en = datetime.fromisoformat(e["dateTime"])
     st_local, en_local = st.astimezone(tz), en.astimezone(tz)
     return CalEvent(
-        day=st_local.date(),
+        day=work_day(st_local, day_start_hour),
         start=st_local,
         end=en_local,
         summary=(ev.get("summary") or "(no title)").strip(),
@@ -131,17 +139,26 @@ class CalendarClient:
         timezone: str = "UTC",
         color_map: dict | None = None,
         skip_all_day: bool = True,
+        day_start_hour: int = 0,
     ):
         self.svc = build("calendar", "v3", credentials=credentials)
         self.tz = ZoneInfo(timezone)
         # YAML keys may be ints or strings; the API returns strings.
         self.color_map = {str(k): v for k, v in (color_map or {}).items()}
         self.skip_all_day = skip_all_day
+        # Where one working day ends and the next begins. Work past midnight
+        # belongs to the day it started on, so James asked for 4am: an evening
+        # block running to 1:30am is that evening's work, not the next day's.
+        self.day_start_hour = day_start_hour
 
     def events(self, calendar_id: str, start_iso: str, end_iso: str) -> list[CalEvent]:
-        """All events in [start_iso, end_iso] (inclusive dates, local timezone)."""
-        start = datetime.combine(date.fromisoformat(start_iso), time.min, tzinfo=self.tz)
-        end = datetime.combine(date.fromisoformat(end_iso), time.max, tzinfo=self.tz)
+        """All events in [start_iso, end_iso] (inclusive dates, local timezone).
+
+        The window runs from day_start_hour on the first date to day_start_hour
+        the morning AFTER the last date, so a late-night block counts against the
+        day it began.
+        """
+        start, end = self.window(start_iso, end_iso)
 
         items: list[dict] = []
         page_token = None
@@ -168,12 +185,22 @@ class CalendarClient:
 
         out: list[CalEvent] = []
         for ev in items:
-            parsed = parse_event(ev, self.tz, self.color_map, self.skip_all_day)
+            parsed = parse_event(ev, self.tz, self.color_map, self.skip_all_day,
+                                 self.day_start_hour)
             if parsed is not None:
                 clipped = clip_to_window(parsed, start, end)
                 if clipped is not None:
                     out.append(clipped)
         return out
+
+    def window(self, start_iso: str, end_iso: str) -> tuple[datetime, datetime]:
+        """The billed span: [first date @ day_start, day after last date @ day_start)."""
+        h = self.day_start_hour
+        return (
+            datetime.combine(date.fromisoformat(start_iso), time(hour=h), tzinfo=self.tz),
+            datetime.combine(date.fromisoformat(end_iso) + timedelta(days=1),
+                             time(hour=h), tzinfo=self.tz),
+        )
 
     # ---- what the invoice needs ----------------------------------------
     def collect(self, calendar_id: str, project: str, start_iso: str, end_iso: str) -> CalendarPull:

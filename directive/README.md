@@ -42,6 +42,11 @@ Same colour map and all-day/cancelled handling as the Apps Script behind the
 calendar-sync sheet, and verified against it event-for-event. **No cap is applied
 — every hour on the calendar is billable, however long the day runs.**
 
+**A working day runs 4am to 4am** (`calendar.day_start_hour`). James works past
+midnight and that evening's block is that evening's work, so the period 1-15 Oct
+means 1 Oct 04:00 through 16 Oct 04:00. On a midnight boundary a block finishing
+at 1:30am had 1.5 h pushed into the next invoice.
+
 Two deliberate differences from that sheet, both about accuracy:
 - **Double-booked time is billed once.** A 30-minute call inside a longer block
   is the same minutes, not extra ones; the sheet sums durations and bills them

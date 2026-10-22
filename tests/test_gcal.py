@@ -225,3 +225,55 @@ def test_an_event_wholly_outside_the_window_is_dropped():
     later = datetime(2026, 10, 2, 17, 0, tzinfo=TZ)
     e = CalEvent(after.date(), after, later, "Block", "", 480.0, "Ride Care")
     assert clip_to_window(e, WIN_S, WIN_E) is None  # after
+
+
+# --------------------------------------------------------------------------
+# Where one working day ends (James works past midnight)
+# --------------------------------------------------------------------------
+class _Win:
+    """Just the window maths, without touching the Calendar API."""
+
+    def __init__(self, day_start_hour):
+        from execution.gcal import CalendarClient
+
+        self.tz, self.day_start_hour = TZ, day_start_hour
+        self.window = CalendarClient.window.__get__(self)
+
+
+def test_a_four_am_day_runs_to_four_am_the_next_morning():
+    ws, we = _Win(4).window("2026-10-01", "2026-10-15")
+    assert (ws.day, ws.hour) == (1, 4)
+    assert (we.month, we.day, we.hour) == (10, 16, 4)   # morning AFTER the 15th
+
+
+def test_a_midnight_day_is_the_plain_calendar_date():
+    ws, we = _Win(0).window("2026-10-01", "2026-10-15")
+    assert (ws.day, ws.hour) == (1, 0)
+    assert (we.day, we.hour) == (16, 0)                 # exclusive end
+
+
+def test_an_evening_block_running_past_midnight_stays_in_the_period():
+    """15 Oct 9:30pm -> 16 Oct 1:30am is that evening's work. Under a midnight
+    boundary 1.5 h of it fell into the next period; under 4am none does."""
+    s = datetime(2026, 10, 15, 21, 30, tzinfo=TZ)
+    en = datetime(2026, 10, 16, 1, 30, tzinfo=TZ)
+    e = CalEvent(s.date(), s, en, "Ride Care", "", 240.0, "Ride Care")
+    ws4, we4 = _Win(4).window("2026-10-01", "2026-10-15")
+    assert clip_to_window(e, ws4, we4) is e                      # untouched
+    ws0, we0 = _Win(0).window("2026-10-01", "2026-10-15")
+    assert clip_to_window(e, ws0, we0).minutes == 150.0          # 1.5 h lost
+
+
+def test_work_before_the_boundary_counts_against_the_previous_day():
+    from execution.gcal import work_day
+
+    one_thirty_am = datetime(2026, 10, 16, 1, 30, tzinfo=TZ)
+    assert work_day(one_thirty_am, 4).isoformat() == "2026-10-15"
+    assert work_day(one_thirty_am, 0).isoformat() == "2026-10-16"
+
+
+def test_work_after_the_boundary_counts_against_its_own_day():
+    from execution.gcal import work_day
+
+    nine_am = datetime(2026, 10, 16, 9, 0, tzinfo=TZ)
+    assert work_day(nine_am, 4).isoformat() == "2026-10-16"

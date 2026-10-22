@@ -32,6 +32,10 @@ schedule:
 calendar:
   timezone: "America/Los_Angeles"
   skip_all_day_events: true      # Home / trips / OOO are 1440-minute noise
+  # Where one working day ends. James works past midnight, and that evening's
+  # block is that evening's work -- so a day runs 4am to 4am, and the period
+  # 1-15 Oct means 1 Oct 04:00 through 16 Oct 04:00.
+  day_start_hour: 4
   # gCal colour id -> project label, copied from that sheet's ColorMapping tab.
   # roster.yaml refers to a person's billable label (calendar_project).
   color_map:

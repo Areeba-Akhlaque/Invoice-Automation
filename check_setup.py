@@ -93,6 +93,7 @@ def check_calendars() -> None:
         timezone=cfg.get("timezone", "UTC"),
         color_map=cfg.get("color_map"),
         skip_all_day=cfg.get("skip_all_day_events", True),
+        day_start_hour=cfg.get("day_start_hour", 0),
     )
     print(f"  Window (previous complete half-month): {start} -> {end}")
     for p in roster:

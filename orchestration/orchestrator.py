@@ -252,6 +252,7 @@ def pull_calendars(
         color_map=cfg.get("color_map"),
         skip_all_day=cfg.get("skip_all_day_events", True),
         day_start_hour=cfg.get("day_start_hour", 0),
+        count_overlapping_time=cfg.get("count_overlapping_time", False),
     )
 
     hours: dict[str, float] = {}

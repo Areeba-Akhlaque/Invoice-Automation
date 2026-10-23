@@ -47,14 +47,14 @@ midnight and that evening's block is that evening's work, so the period 1-15 Oct
 means 1 Oct 04:00 through 16 Oct 04:00. On a midnight boundary a block finishing
 at 1:30am had 1.5 h pushed into the next invoice.
 
-Two deliberate differences from that sheet, both about accuracy:
-- **Double-booked time is billed once.** A 30-minute call inside a longer block
-  is the same minutes, not extra ones; the sheet sums durations and bills them
-  twice (2.33 h on one real fortnight, $467 at James's rate). The amount is
-  reported each run as `overlap_hours` so the two can be reconciled.
+- **Double-booked time is billed twice** (`calendar.count_overlapping_time`), on
+  the client's instruction: meetings overrun their slots and the calendar's
+  marked times understate that. The amount is reported every run as
+  `overlap_hours` — 0.25 to 2.33 h a fortnight — so a figure counted the other
+  way can always be reconciled.
 - **Events are clipped to the billed window.** The Calendar API returns anything
-  overlapping it, so a block that began the night before would otherwise bill its
-  earlier hours to this invoice.
+  overlapping it, so a block that began before the period would otherwise bill
+  its earlier hours to this invoice.
 
 Also worth watching: **uncoloured time is billed to nobody** — it has run at
 2-53 h per half-month. `python check_setup.py` reports it every run.

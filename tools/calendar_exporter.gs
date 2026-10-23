@@ -11,10 +11,10 @@
  *     into a 1-15 Oct window, when 1.5 of them happened on 16 October and
  *     belong to the next period. Each event is now trimmed to the window.
  *
- *  2. COUNT DOUBLE-BOOKED TIME ONCE. The original summed every duration, so a
- *     30-minute call sitting inside a longer block was billed twice. Totals are
- *     now the real elapsed time (overlapping events merged). Measured on real
- *     fortnights: 0.25 h to 2.33 h of double-counting each time.
+ *  2. REPORT DOUBLE-BOOKED TIME. Two events on the same minutes are still
+ *     billed twice (COUNT_OVERLAPPING_TIME), because meetings overrun their
+ *     slots, but the amount is now reported so a figure can be reconciled
+ *     against one counted the other way. Measured: 0.25 h to 2.33 h a fortnight.
  *
  * The per-row "Duration (mins)" column now shows BILLABLE minutes (clipped).
  * The script also writes the corrected totals to the "Ridecare Hours" tab,
@@ -32,6 +32,10 @@ const BILLABLE_CATEGORY   = "Ride Care";
 // on, so 4am: an evening block running to 1:30am is that evening's work. The
 // window therefore runs 4am on the first date to 4am the morning AFTER the last.
 const DAY_START_HOUR      = 4;
+// Two events on the same minutes are billed twice, on the client's instruction:
+// meetings overrun their slots and the marked times understate that. Set false
+// to count the real elapsed time instead; the report shows the amount either way.
+const COUNT_OVERLAPPING_TIME = true;
 const TOTALS_SHEET_NAME   = "Ridecare Hours";
 /********************/
 
@@ -164,16 +168,18 @@ function mergedMinutes(list) {
 }
 
 /**
- * Put the corrected figures on the totals tab. The old =SUMIF over the
- * Duration column cannot be right, because it adds double-booked minutes back.
+ * Put the figures on the totals tab. The old =SUMIF over the Duration column
+ * cannot express either rule once events are clipped, so the script owns these
+ * cells.
  */
-function writeTotals(mergedMins, doubleBookedMins, clippedMins) {
+function writeTotals(billableMins, doubleBookedMins, clippedMins) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TOTALS_SHEET_NAME);
   if (!sheet) return;
   sheet.getRange("A1:B4").setValues([
-    ["Total " + BILLABLE_CATEGORY + " minutes", mergedMins],
-    ["Total " + BILLABLE_CATEGORY + " hours:",  mergedMins / 60],
-    ["Double-booked hours (counted once)",      doubleBookedMins / 60],
+    ["Total " + BILLABLE_CATEGORY + " minutes", billableMins],
+    ["Total " + BILLABLE_CATEGORY + " hours:",  billableMins / 60],
+    [COUNT_OVERLAPPING_TIME ? "Double-booked hours (included above)"
+                            : "Double-booked hours (counted once)", doubleBookedMins / 60],
     ["Hours trimmed as outside the window",     clippedMins / 60]
   ]);
 }

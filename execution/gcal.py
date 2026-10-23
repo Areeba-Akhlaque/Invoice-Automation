@@ -140,6 +140,7 @@ class CalendarClient:
         color_map: dict | None = None,
         skip_all_day: bool = True,
         day_start_hour: int = 0,
+        count_overlapping_time: bool = False,
     ):
         self.svc = build("calendar", "v3", credentials=credentials)
         self.tz = ZoneInfo(timezone)
@@ -150,6 +151,10 @@ class CalendarClient:
         # belongs to the day it started on, so James asked for 4am: an evening
         # block running to 1:30am is that evening's work, not the next day's.
         self.day_start_hour = day_start_hour
+        # Whether two events on the same minutes are billed twice. Set on the
+        # client's instruction: meetings overrun their slot, and the calendar's
+        # marked times understate it, so the double booking is left in.
+        self.count_overlapping_time = count_overlapping_time
 
     def events(self, calendar_id: str, start_iso: str, end_iso: str) -> list[CalEvent]:
         """All events in [start_iso, end_iso] (inclusive dates, local timezone).
@@ -205,7 +210,8 @@ class CalendarClient:
     # ---- what the invoice needs ----------------------------------------
     def collect(self, calendar_id: str, project: str, start_iso: str, end_iso: str) -> CalendarPull:
         """Hours and description material for one project label, in one API pass."""
-        return summarise(self.events(calendar_id, start_iso, end_iso), project)
+        return summarise(self.events(calendar_id, start_iso, end_iso), project,
+                         count_overlapping_time=self.count_overlapping_time)
 
 
 @dataclass
@@ -214,20 +220,21 @@ class CalendarPull:
     entries: list[str]
     event_count: int
     totals: dict[str, float]  # hours per colour label, for spotting mis-colouring
-    overlap_hours: float  # double-booked time, excluded from `hours` (reported only)
+    overlap_hours: float  # double-booked time; inside `hours` unless merged away
 
 
-def summarise(events: list[CalEvent], project: str) -> CalendarPull:
+def summarise(events: list[CalEvent], project: str,
+              count_overlapping_time: bool = False) -> CalendarPull:
     """Aggregate events for one project label.
 
-    Hours are the real elapsed time: when two events sit on the same minutes —
-    a 30-minute call inside a longer block, say — that minute is billed once, not
-    twice. No cap or other policy is applied; every hour on the calendar counts.
+    count_overlapping_time decides what happens when two events sit on the same
+    minutes. Billing them twice is the client's instruction: meetings overrun
+    their slots and the calendar's marked times understate that, so the double
+    booking is left in rather than merged away. Either way the amount is reported
+    as overlap_hours, so a figure can be reconciled against one counted the other
+    way.
 
-    This is where we deliberately differ from the Apps Script behind the
-    calendar-sync sheet, which sums durations and so bills double-booked time
-    twice (2.33 h on one real fortnight, $467 at James's rate). The amount is
-    reported as overlap_hours so the two can still be reconciled.
+    No cap is applied; every hour on the calendar counts.
     """
     totals: dict[str, float] = {}
     for e in events:
@@ -252,7 +259,7 @@ def summarise(events: list[CalEvent], project: str) -> CalendarPull:
 
     wall = _wall_clock_minutes(mine)
     return CalendarPull(
-        hours=round(wall / 60.0, 2),
+        hours=round((minutes if count_overlapping_time else wall) / 60.0, 2),
         entries=entries,
         event_count=len(mine),
         totals={k: round(v / 60.0, 2) for k, v in sorted(totals.items(), key=lambda x: -x[1])},

@@ -277,3 +277,28 @@ def test_work_after_the_boundary_counts_against_its_own_day():
 
     nine_am = datetime(2026, 10, 16, 9, 0, tzinfo=TZ)
     assert work_day(nine_am, 4).isoformat() == "2026-10-16"
+
+
+# --------------------------------------------------------------------------
+# Whether double-booked time is billed (client's call, not ours)
+# --------------------------------------------------------------------------
+def test_overlapping_time_is_billed_twice_when_asked_for():
+    """Meetings overrun their slots and the marked times understate that, so the
+    client wants the double booking left in."""
+    got = summarise([ev(9, 0, 10, 0), ev(9, 30, 10, 30)], "Ride Care",
+                    count_overlapping_time=True)
+    assert got.hours == 2.0          # 60 + 60
+    assert got.overlap_hours == 0.5  # still reported, now inside `hours`
+
+
+def test_overlapping_time_can_still_be_counted_once():
+    got = summarise([ev(9, 0, 10, 0), ev(9, 30, 10, 30)], "Ride Care",
+                    count_overlapping_time=False)
+    assert got.hours == 1.5
+    assert got.overlap_hours == 0.5
+
+
+def test_the_flag_changes_nothing_when_no_events_overlap():
+    evs = [ev(9, 0, 10, 0), ev(11, 0, 12, 0)]
+    assert summarise(evs, "Ride Care", True).hours == 2.0
+    assert summarise(evs, "Ride Care", False).hours == 2.0

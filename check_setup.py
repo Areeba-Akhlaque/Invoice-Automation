@@ -94,6 +94,7 @@ def check_calendars() -> None:
         color_map=cfg.get("color_map"),
         skip_all_day=cfg.get("skip_all_day_events", True),
         day_start_hour=cfg.get("day_start_hour", 0),
+        count_overlapping_time=cfg.get("count_overlapping_time", False),
     )
     print(f"  Window (previous complete half-month): {start} -> {end}")
     for p in roster:

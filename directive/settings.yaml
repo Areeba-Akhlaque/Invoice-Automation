@@ -36,6 +36,10 @@ calendar:
   # block is that evening's work -- so a day runs 4am to 4am, and the period
   # 1-15 Oct means 1 Oct 04:00 through 16 Oct 04:00.
   day_start_hour: 4
+  # Two events on the same minutes are billed twice, on the client's instruction:
+  # meetings overrun their slots and the marked times understate that. The run
+  # still reports the amount so a figure counted either way can be reconciled.
+  count_overlapping_time: true
   # gCal colour id -> project label, copied from that sheet's ColorMapping tab.
   # roster.yaml refers to a person's billable label (calendar_project).
   color_map:

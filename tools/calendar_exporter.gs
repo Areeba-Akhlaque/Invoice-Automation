@@ -134,17 +134,19 @@ function getCalendarEvents() {
 
   sheet.getRange(5, 1, out.length, out[0].length).setValues(out);
 
-  // FIX 2: the billable total is elapsed time, not the sum of durations.
+  // FIX 2: measure the double booking; whether it is billed is COUNT_OVERLAPPING_TIME.
   const mergedMins = mergedMinutes(spans[BILLABLE_CATEGORY] || []);
   const summedMins = Math.round((summedMs[BILLABLE_CATEGORY] || 0) / 60000);
   const doubleBooked = summedMins - mergedMins;
+  const billableMins = COUNT_OVERLAPPING_TIME ? summedMins : mergedMins;
 
-  writeTotals(mergedMins, doubleBooked, Math.round(clippedMs / 60000));
+  writeTotals(billableMins, doubleBooked, Math.round(clippedMs / 60000));
 
   Browser.msgBox(
     "Synced " + (out.length - 1) + " events.\n\n" +
-    BILLABLE_CATEGORY + " billable hours: " + (mergedMins / 60).toFixed(2) + "\n\n" +
-    "(double-booked time counted once: " + (doubleBooked / 60).toFixed(2) + " h\n" +
+    BILLABLE_CATEGORY + " billable hours: " + (billableMins / 60).toFixed(2) + "\n\n" +
+    "(double-booked time " + (COUNT_OVERLAPPING_TIME ? "INCLUDED" : "counted once") +
+    ": " + (doubleBooked / 60).toFixed(2) + " h\n" +
     " trimmed as outside the window: " + (clippedMs / 60000 / 60).toFixed(2) + " h)"
   );
 }

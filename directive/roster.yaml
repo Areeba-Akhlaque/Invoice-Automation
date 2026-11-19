@@ -78,13 +78,13 @@ laborers:
     kimai_projects: ["Pvragon", "Ride Care"]
 
   - name: "JP Casabianca"
-    base_rate: 49          # confirmed 2026-09; 49 * 1.2 = 58.80 on the sheet
+    base_rate: 58.8        # raised 2026-11; 58.8 * 1.2 = 70.56 on the sheet
     markup: 1.2
     hours_source: fixed
     kimai_user_id: 36        # "Juan Pablo"
 
   - name: "Rafael Casabianca"
-    base_rate: 44          # confirmed 2026-09; 44 * 1.2 = 52.80 on the sheet
+    base_rate: 52.8        # raised 2026-11; 52.8 * 1.2 = 63.36 on the sheet
     markup: 1.2
     hours_source: fixed
     kimai_user_id: 37

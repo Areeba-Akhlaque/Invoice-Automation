@@ -115,10 +115,20 @@ python tools/redo_description.py --all --tab DRC-0070 --write  # apply
 ```
 
 ## Scheduling
-`.github/workflows/invoice.yml` runs on a cron (twice a month) or via the Actions
-**Run workflow** button (with a write toggle, period, cap and description-window
-inputs). No server or laptop required. `.github/workflows/ci.yml` runs lint +
-tests on every push.
+`.github/workflows/invoice.yml` runs on a cron — the **4th and the 19th**, the day
+before each review — or via the Actions **Run workflow** button (with a write
+toggle, period, cap and description-window inputs). No server or laptop required.
+`.github/workflows/ci.yml` runs lint + tests on every push.
+
+The run day and the cron are configured in two places that have to agree:
+`schedule.run_days` in `directive/settings.yaml` decides whether `--auto` does
+anything, and the cron in the workflow decides when it wakes up. A test fails if
+they drift apart. Moving the run day does not move the invoice period or the issue
+date — both are computed from the period itself.
+
+If the draft was already built by hand, the scheduled run reports "Nothing to do"
+and exits clean rather than failing; a duplicate period is still refused at a
+terminal.
 
 ## Security
 Secrets (`.env`, `token.json`, client secrets) are gitignored and never committed.

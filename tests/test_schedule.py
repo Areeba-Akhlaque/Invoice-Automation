@@ -48,7 +48,7 @@ def test_issue_date_and_due():
     assert issue_date_for("2026-12-16") == "2026-12-23"
 
 
-@pytest.mark.parametrize("run_day", [date(2026, 10, 5), date(2026, 10, 20)])
+@pytest.mark.parametrize("run_day", [date(2026, 10, 4), date(2026, 10, 19)])
 def test_the_described_period_is_the_period_whose_hours_are_billed(run_day):
     """The invoice is raised in advance: one built on 5 Oct bills 1-15 Oct but the
     hours come from 16-30 Sep, so the descriptions must cover 16-30 Sep too. A
@@ -62,21 +62,43 @@ def test_the_described_period_is_the_period_whose_hours_are_billed(run_day):
 
 
 @pytest.mark.parametrize("run_day,expected_period", [
-    (date(2026, 10, 5), ("2026-10-01", "2026-10-15")),
-    (date(2026, 10, 20), ("2026-10-16", "2026-10-31")),
+    (date(2026, 10, 4), ("2026-10-01", "2026-10-15")),
+    (date(2026, 10, 19), ("2026-10-16", "2026-10-31")),
+    (date(2026, 2, 19), ("2026-02-16", "2026-02-28")),   # short month
+    (date(2028, 2, 19), ("2028-02-16", "2028-02-29")),   # leap year
 ])
-def test_the_new_run_days_land_on_the_right_period(run_day, expected_period):
-    """Moved from the 7th/22nd to the 5th/20th: each still falls inside the half
-    it is meant to bill, and the hours window behind it is already complete."""
+def test_the_run_days_land_on_the_right_period(run_day, expected_period):
+    """Moved 7th/22nd -> 5th/20th -> 4th/19th, each time a day earlier so the draft
+    is on the sheet before the review. Moving the run day must not move the period:
+    each still falls inside the half it bills, and the hours window behind it is
+    already complete, which is what makes the earlier day safe."""
     assert current_billing_period(run_day) == expected_period
     _hours_start, hours_end = previous_half_month(expected_period[0])
     assert hours_end < run_day.isoformat()
 
 
 def test_is_billing_day_matches_the_configured_run_days():
-    assert is_billing_day([5, 20], date(2026, 10, 5))
-    assert is_billing_day([5, 20], date(2026, 10, 20))
-    assert not is_billing_day([5, 20], date(2026, 10, 7))
+    assert is_billing_day([4, 19], date(2026, 10, 4))
+    assert is_billing_day([4, 19], date(2026, 10, 19))
+    assert not is_billing_day([4, 19], date(2026, 10, 5))
+    assert not is_billing_day([4, 19], date(2026, 10, 20))
+
+
+def test_the_configured_run_days_match_the_cron_that_wakes_them():
+    """Two places have to agree: the cron starts the job and run_days decides
+    whether it does anything. Move one without the other and the result is silence
+    — the cron fires on a day --auto rejects, or nothing fires at all."""
+    import re
+    from pathlib import Path
+
+    from execution.config import load_settings
+
+    run_days = load_settings()["schedule"]["run_days"]
+    workflow = Path(__file__).resolve().parent.parent / ".github/workflows/invoice.yml"
+    crons = re.findall(r'cron:\s*"([^"]+)"', workflow.read_text(encoding="utf-8"))
+    assert crons, "no cron in the workflow"
+    cron_days = sorted(int(d) for d in crons[0].split()[2].split(","))
+    assert cron_days == sorted(run_days), f"cron runs on {cron_days}, run_days is {run_days}"
 
 
 def test_is_billing_day():

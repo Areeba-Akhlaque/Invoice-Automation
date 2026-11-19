@@ -24,7 +24,11 @@ invoice:
 # there is time to review before the issue date; the issue date itself is computed
 # from the period, so moving these days does not move it.
 schedule:
-  run_days: [5, 20]        # day-of-month the automation generates a draft
+  # The day BEFORE each review (reviews are on the 5th and the 20th), so the draft
+  # is already there to be reviewed. Keep in step with the cron in
+  # .github/workflows/invoice.yml — this list is what --auto checks, the cron is
+  # what wakes it up, and only one of them failing to move means no draft at all.
+  run_days: [4, 19]        # day-of-month the automation generates a draft
   issue_offset_days: 7     # invoice issue date = period start + this
 
 # Calendar-based hours (hours_source: calendar). Mirrors the Apps Script that

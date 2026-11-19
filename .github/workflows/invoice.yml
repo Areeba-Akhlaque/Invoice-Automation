@@ -2,13 +2,18 @@ name: DRC Invoice
 
 # Cloud scheduling — runs on GitHub's servers, no laptop needed.
 #
-# Cron is UTC and does NOT observe DST, so midnight Pacific has no single cron:
-# it is 08:00 UTC in winter (PST) and 07:00 UTC in summer (PDT). 08:00 is the safe
-# choice — midnight Pacific in winter, 1am in summer, and the 5th/20th either way.
-# 07:00 would drift to 11pm on the 4th/19th in winter, i.e. the wrong day.
+# Runs the DAY BEFORE each review, so the draft is already on the sheet when the
+# review happens on the 5th and the 20th. The period it bills is unaffected: the
+# 4th still falls in 1-15 and the 19th still falls in 16-EOM, and the hours window
+# behind each (16-EOM and 1-15 of the previous half) is complete by then.
+#
+# Cron is UTC and does NOT observe DST, so a fixed Pacific hour has no single cron:
+# midnight Pacific is 08:00 UTC in winter (PST) and 07:00 UTC in summer (PDT).
+# 08:00 is the safe choice — it stays on the 4th/19th either way. 07:00 would
+# drift to 11pm on the 3rd/18th in winter, i.e. the wrong day.
 on:
   schedule:
-    - cron: "0 8 5,20 * *"    # 5th & 20th, 12am PST / 1am PDT -> bills 1-15 / 16-EOM
+    - cron: "0 8 4,19 * *"    # 4th & 19th, 12am PST / 1am PDT -> bills 1-15 / 16-EOM
   workflow_dispatch:           # manual "Run workflow" button
     inputs:
       write:

@@ -25,6 +25,7 @@ import textwrap
 from datetime import date
 
 from execution.config import load_settings
+from execution.invoice import PeriodAlreadyInvoiced
 from orchestration.orchestrator import commit, prepare
 from orchestration.schedule import is_billing_day
 
@@ -127,6 +128,16 @@ def main() -> None:
 
     try:
         run = prepare(args)
+    except PeriodAlreadyInvoiced as e:
+        # On a schedule this is the expected outcome whenever the tab was built a
+        # day or two early by hand, which is the normal way it happens: the review
+        # is on the 5th and the 20th, so the draft is often already there when the
+        # cron fires. Nothing is wrong and nothing is left to do, so say so and
+        # exit clean rather than sending another "workflow failed" email.
+        if args.auto:
+            print(f"\nNothing to do: {e.args[0].splitlines()[0]}\n")
+            return
+        sys.exit(f"\nERROR: {e}\n")
     except (RuntimeError, ValueError) as e:
         sys.exit(f"\nERROR: {e}\n")
 

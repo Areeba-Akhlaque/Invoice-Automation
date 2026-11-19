@@ -17,6 +17,17 @@ from dataclasses import dataclass, field
 from execution.config import _normalize_name, load_roster, load_settings
 
 
+class PeriodAlreadyInvoiced(RuntimeError):
+    """The latest tab already bills the period this run was going to bill.
+
+    Its own kind of error because it is not always a failure. For someone at a
+    terminal it is: they asked for a tab and did not get one. For the scheduled
+    run it is the normal result of the tab having been made a day or two early
+    by hand — the work is done, and the twice-monthly "workflow failed" email
+    that followed only trained everyone to ignore those emails.
+    """
+
+
 # --------------------------------------------------------------------------
 # Template snapshot + layout validation
 # --------------------------------------------------------------------------
@@ -419,7 +430,9 @@ def build_plan(
             f"Creating {inv_no} would bill the same period twice."
         )
         if not allow_duplicate_period:
-            raise RuntimeError(msg + "\nUse --allow-duplicate-period if this is intentional.")
+            raise PeriodAlreadyInvoiced(
+                msg + "\nUse --allow-duplicate-period if this is intentional."
+            )
 
     if cap is None:
         cap = parse_carried_cap(snap.discount_formula, lay["subtotal_cell"])

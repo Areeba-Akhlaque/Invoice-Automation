@@ -421,9 +421,8 @@ def build_plan(
         if not allow_duplicate_period:
             raise RuntimeError(msg + "\nUse --allow-duplicate-period if this is intentional.")
 
-    carried_cap = None
     if cap is None:
-        carried_cap = cap = parse_carried_cap(snap.discount_formula, lay["subtotal_cell"])
+        cap = parse_carried_cap(snap.discount_formula, lay["subtotal_cell"])
 
     kimai_by_id: dict[int, float] = {}
     kimai_by_name: dict[str, float] = {}
@@ -541,23 +540,16 @@ def build_plan(
                 f"passthrough '{name}': no row with that name in '{template_tab}' — will not be written"
             )
 
-    # A cap above the subtotal makes the discount negative, i.e. it ADDS money and
-    # bills more than the work. Carrying one forward is a convenience, so drop it
-    # when it cannot apply and say so; an explicit --cap is the reviewer's call and
-    # is only warned about.
+    # A cap above the subtotal makes the discount negative, i.e. the invoice bills
+    # more than the work. It is still the agreed contract amount, so it is carried
+    # and flagged rather than dropped: dropping it meant someone re-entering the
+    # figure by hand every period, and a reviewer adjusts the cell either way.
     if plan.cap is not None and plan.cap > plan.subtotal:
-        note = (
+        plan.warnings.append(
             f"contract amount ${plan.cap:,.2f} is ABOVE this invoice's subtotal "
-            f"${plan.subtotal:,.2f}, so no discount applies"
+            f"${plan.subtotal:,.2f}, so the discount cell will be NEGATIVE "
+            f"(${plan.subtotal - plan.cap:,.2f}) — review the contract amount"
         )
-        if carried_cap is not None and plan.cap == carried_cap:
-            plan.cap = None
-            plan.warnings.append(
-                f"{note} — not carrying it over from '{template_tab}'; set the "
-                f"contract amount on the new tab if one was agreed"
-            )
-        else:
-            plan.warnings.append(f"{note} — the discount cell will be NEGATIVE")
 
     return plan
 

@@ -126,6 +126,16 @@ def test_no_cap_zeroes_the_discount_instead_of_leaving_a_stale_one(snapshot):
     assert sheets.written["F35"] == 0
 
 
+def test_a_contract_amount_above_the_subtotal_still_reaches_the_sheet(snapshot):
+    """The contract amount is a fixed fortnightly figure, so a light period leaves
+    it above the subtotal and the discount goes negative. It must still be written:
+    dropping it blanked the cell and left the figure to be re-entered by hand every
+    period. The formula is live, so a reviewer adjusts the number in place."""
+    sheets = FakeSheets(["DRC-0065"])
+    write_plan(sheets, _plan(snapshot, cap=64250.0))
+    assert sheets.written["F35"] == "=F34-64250"
+
+
 def test_retired_person_row_is_cleared_and_left_visible(snapshot):
     sheets = FakeSheets(["DRC-0065"])
     write_plan(sheets, _plan(snapshot, retired=["Clarissa"]))

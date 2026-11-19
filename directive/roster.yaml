@@ -130,14 +130,17 @@ laborers:
   # (86.5 x 2) is 34.6821/h of cost; the sheet applies Cherry's 20% markup on its
   # row, so the client sees $41.62. cfg_laborers holds it as =6000/173 so the cell
   # says where it came from.
-  # NO kimai_projects override on purpose: his hours are fixed, and his
-  # descriptions must come from Ride Care work only — not onboarding time logged
-  # under Pvragon. Until he logs Ride Care work his project cell is flagged.
+  # kimai_projects covers BOTH projects, like Dana. He logs most of his work under
+  # Pvragon and only a little under Ride Care, so the plain Ride Care filter saw a
+  # single repeated entry and flagged his cell empty every period. His hours are
+  # fixed, so this changes nothing he is billed for — only the material his
+  # description is written from, which the client asked to be accurate.
   - name: "Pablo Mejia"      # MUST match column B of the invoice tab exactly
     base_rate: 34.6821
     markup: 1.2
     hours_source: fixed
     kimai_user_id: 43        # Kimai alias "Pablo"
+    kimai_projects: ["Pvragon", "Ride Care"]
 
   - name: "Bradd Schofield"
     base_rate: 125

@@ -25,7 +25,6 @@ from execution.summarizer import GeminiSummarizer
 
 from .schedule import (
     current_billing_period,
-    description_window,
     issue_date_for,
     previous_half_month,
 )
@@ -236,10 +235,9 @@ def pull_calendars(
     Apps Script that fills the calendar-sync sheet.
 
     The description covers exactly the events that produced the hours: same window,
-    same colour. For Kimai people the two windows differ by design (hours are the
-    previous complete half-month, descriptions the fortnight up to the issue date),
-    but here the description IS the itemisation of the billed time, so they must
-    agree. An explicit --desc-window still overrides it.
+    same colour. That is now true for Kimai people too — the description describes
+    the period that was worked and billed, not a fortnight counted back from the
+    issue date. An explicit --desc-window still overrides it.
     """
     people = [p for p in roster if p["active"] and p["hours_source"] == "calendar"]
     if not people:
@@ -395,7 +393,12 @@ def prepare(opts) -> InvoiceRun:
 
     ph_start, ph_end = previous_half_month(start)
     hours_window = (g("hours_start") or ph_start, g("hours_end") or ph_end)
-    desc_win = description_window(issue)
+    # The invoice is raised in advance, so the period it bills is NOT the period
+    # worked: an invoice for 16-30 Nov bills the hours from 1-15 Nov. The
+    # description has to describe that same worked period, so it uses the hours
+    # window — not a window counted back from the issue date, which drifted past
+    # it and missed real work (Pablo's Ride Care days fell outside).
+    desc_win = hours_window
 
     kimai = None
     kimai_rows = None

@@ -21,10 +21,15 @@ layer is data that both read).
 ## How it works (high level)
 - Pulls hours from each person's time source for the relevant period — Kimai, a
   fixed full-time figure, a colour-coded Google Calendar, or a manual override.
-- Writes one concise description per person from their time entries.
+- Writes one description per person from their time entries, covering the period
+  that was actually worked. The invoice is raised in advance, so a tab for 16-30
+  Nov bills — and describes — the hours from 1-15 Nov.
 - Duplicates the latest invoice tab and fills only the variable cells, so the
   sheet's own rate/formula logic is preserved.
-- The total is the calculated subtotal; a reviewer applies any agreed adjustment.
+- Carries the agreed contract amount forward from the previous invoice and fills
+  the discount cell from it, so nobody re-types it each period. A light period can
+  leave the contract amount above the subtotal, which makes the discount negative:
+  that is reported as a warning and left for the reviewer, not silently dropped.
 
 **The sheet is the source of truth.** Rates and any cell we don't write come from
 the tab itself, so the preview shows what the sheet will actually compute —
@@ -97,10 +102,16 @@ belongs to.
 
 ### One-off maintenance
 ```bash
-# Re-summarize one person's description on an EXISTING tab, without regenerating it:
+# Re-summarize ONE person's description on an EXISTING tab, from a custom window
+# (e.g. their normal window was all PTO, or they started mid-period):
 python tools/redo_description.py --person "Victor Cheung" \
     --from 2026-08-10 --to 2026-08-24 --tab DRC-0065          # preview
 python tools/redo_description.py ... --write                   # apply
+
+# Re-summarize EVERYONE on a tab — after the house style or length budget changes.
+# Window defaults to the period that tab bills hours for. One batched Gemini call.
+python tools/redo_description.py --all --tab DRC-0070          # preview
+python tools/redo_description.py --all --tab DRC-0070 --write  # apply
 ```
 
 ## Scheduling

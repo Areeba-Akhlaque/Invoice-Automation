@@ -176,6 +176,18 @@ def test_no_cap_means_total_equals_subtotal_and_zero_discount():
     assert plan.discount == 0
 
 
+def test_a_cap_above_the_subtotal_is_kept_and_produces_a_negative_discount():
+    """The contract amount is a fixed fortnightly figure, so a light period puts it
+    ABOVE the subtotal and the discount goes negative. It used to be dropped, which
+    left a blank discount cell for someone to re-enter the figure by hand every
+    period; it is carried and flagged instead, and a reviewer adjusts the cell
+    either way. Real case: DRC-0070, subtotal 63,993.51 against 64,250.00."""
+    plan = _plan(cap=64250.00, carried_passthroughs={"x": 63993.51})
+    assert plan.cap == 64250.00, "the agreed contract amount must survive"
+    assert plan.total == 64250.00
+    assert plan.discount == pytest.approx(-256.49)
+
+
 # --------------------------------------------------------------------------
 # Option A: telling a person row from a pass-through row by its AMOUNT formula
 # --------------------------------------------------------------------------

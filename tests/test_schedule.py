@@ -5,7 +5,6 @@ import pytest
 
 from orchestration.schedule import (
     current_billing_period,
-    description_window,
     is_billing_day,
     issue_date_for,
     previous_half_month,
@@ -49,30 +48,17 @@ def test_issue_date_and_due():
     assert issue_date_for("2026-12-16") == "2026-12-23"
 
 
-def test_description_window_is_fifteen_days_ending_the_day_before_issue():
-    start, end = description_window("2026-09-08", today=date(2026, 9, 7))
-    assert (start, end) == ("2026-08-24", "2026-09-07")
-
-
-def test_description_window_never_reaches_past_today():
-    """The automation runs before the issue date, so the raw window ends in the
-    future — further ahead the earlier in the month it runs. Future days hold no
-    entries, so the window should say what it actually covers."""
-    start, end = description_window("2026-10-08", today=date(2026, 10, 5))
-    assert (start, end) == ("2026-09-23", "2026-10-05")
-
-
-def test_description_window_is_untouched_when_it_is_already_in_the_past():
-    start, end = description_window("2026-09-08", today=date(2026, 9, 30))
-    assert (start, end) == ("2026-08-24", "2026-09-07")
-
-
-def test_a_wholly_future_window_is_left_alone_rather_than_inverted():
-    """Capping a window that has not started yet would put its end before its
-    start; better to hand back the real range and find nothing in it."""
-    start, end = description_window("2026-12-08", today=date(2026, 10, 5))
-    assert start < end
-    assert (start, end) == ("2026-11-23", "2026-12-07")
+@pytest.mark.parametrize("run_day", [date(2026, 10, 5), date(2026, 10, 20)])
+def test_the_described_period_is_the_period_whose_hours_are_billed(run_day):
+    """The invoice is raised in advance: one built on 5 Oct bills 1-15 Oct but the
+    hours come from 16-30 Sep, so the descriptions must cover 16-30 Sep too. A
+    window counted back from the issue date drifted off that period and missed
+    real work, so there is no separate description window any more."""
+    period_start, _period_end = current_billing_period(run_day)
+    hours_window = previous_half_month(period_start)
+    # What orchestrator.prepare() now uses for both hours and descriptions.
+    assert hours_window[1] < run_day.isoformat()   # the worked period is complete
+    assert hours_window == previous_half_month(period_start)
 
 
 @pytest.mark.parametrize("run_day,expected_period", [

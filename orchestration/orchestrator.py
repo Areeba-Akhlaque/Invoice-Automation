@@ -22,6 +22,7 @@ from execution.entries import (
     compile_patterns,
     people_names,
     scrub_meeting_mentions,
+    unsupported_terms,
 )
 from execution.gcal import CalendarClient
 from execution.invoice import InvoicePlan, build_plan, write_plan
@@ -226,6 +227,7 @@ def build_descriptions(
     descriptions = gem.summarize_batch(work)
     # The model names meetings anyway, and a prose entry hides them from the
     # segment filter, so the rule is enforced once more on the finished line.
+    source = dict(work)
     for name, text in list(descriptions.items()):
         scrubbed = scrub_meeting_mentions(text, scrub_patterns, names)
         if scrubbed != text:
@@ -235,6 +237,17 @@ def build_descriptions(
         else:
             del descriptions[name]
             flags[name] = "generated description was only meetings"
+            continue
+        # The prompt forbids inventing work and the model does it anyway: a
+        # summary of ten entries about infra audit tickets once cited "Storybook".
+        # The cell keeps its text -- the rest of the line is usually right -- but
+        # this must be read before the invoice goes out.
+        invented = unsupported_terms(descriptions[name], source.get(name, []))
+        if invented:
+            say(
+                f"  !! {name}: the AI named {', '.join(invented)}, which appears in "
+                f"NONE of their time entries. Check this cell before sending."
+            )
     missing = [name for name, _entries in work if name not in descriptions]
 
     if missing and gem.unavailable:

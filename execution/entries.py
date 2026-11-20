@@ -250,6 +250,51 @@ def clean_entry(
     return ". ".join(k for k in kept if k)
 
 
+# Capitalised words that are ordinary English, not a product or system name, so
+# their absence from the source entries means nothing.
+_COMMON_CAPS = {
+    "a", "an", "and", "the", "with", "for", "of", "in", "on", "to", "across",
+    "including", "plus", "work", "updates", "fixes", "review", "reviews",
+    "testing", "tests", "support", "billing", "driver", "client", "clients",
+    "manager", "audit", "trip", "log", "logs", "dispatch", "transport", "route",
+    "routes", "ride", "rides", "crisis", "coverage", "claims", "claim", "daily",
+    "weekly", "monthly", "new", "old", "phase", "staging", "production", "prod",
+    "data", "team", "ticket", "tickets", "scoping", "triage", "cleanup",
+}
+
+_PROPER = re.compile(r"\b([A-Z][A-Za-z0-9]*(?:[A-Z][A-Za-z0-9]*)*|[A-Z]{2,}\d*)\b")
+
+
+def unsupported_terms(description: str, entries: list[str]) -> list[str]:
+    """Product or system names in a GENERATED description that are nowhere in the
+    source entries — i.e. the model invented them.
+
+    It does happen despite the prompt forbidding it: a summary of ten entries about
+    infra audit tickets came back citing "Storybook test updates", which appears in
+    none of them. This cell goes to a client, so a named system that cannot be
+    traced to a time entry is worth stopping on.
+
+    Only proper-noun shapes are checked (capitalised mid-sentence, CamelCase, or an
+    acronym). Ordinary paraphrasing is the model's job and is left alone.
+    """
+    haystack = " ".join(entries).lower()
+    words = description.split()
+    out = []
+    for i, raw in enumerate(words):
+        token = raw.strip(".,;:()[]\"'/")
+        if not token or not _PROPER.fullmatch(token):
+            continue
+        # The first word of the line is capitalised by convention, not because it
+        # is a name.
+        if i == 0 and token.lower() in _COMMON_CAPS:
+            continue
+        if token.lower() in _COMMON_CAPS:
+            continue
+        if token.lower() not in haystack and token not in out:
+            out.append(token)
+    return out
+
+
 def people_names(roster: list[dict], extra: list[str] | None = None) -> set[str]:
     """Colleagues' first names, for stripping out of entry text.
 

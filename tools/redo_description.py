@@ -35,6 +35,13 @@ from execution.config import (
     load_roster,
     load_settings,
 )
+from execution.entries import (
+    clean_entries,
+    compile_patterns,
+    people_names,
+    scrub_meeting_mentions,
+    unsupported_terms,
+)
 from execution.invoice import latest_invoice_tab, resolve_layout
 from execution.kimai import KimaiClient
 from execution.sheets import SheetsClient
@@ -84,14 +91,31 @@ def redo_one(args, settings, sheets) -> None:
     print(f"Entries found: {len(entries)}")
     if not entries:
         sys.exit("No Kimai entries in that window — nothing to summarize.")
+
+    # Same filtering as the real run. Without this, --person quietly wrote meeting
+    # names into a cell while --all and the scheduled run stripped them out.
+    cfg = settings.get("descriptions") or {}
+    names = people_names(load_roster(), cfg.get("people"))
+    entries, dropped = clean_entries(entries, compile_patterns(cfg.get("drop_segments")), names)
+    if dropped:
+        print(f"Dropped      : {dropped} recurring-meeting / time-off entries")
+    if not entries:
+        sys.exit("Every entry in that window was a recurring meeting or time off.")
     for e in GeminiSummarizer._dedupe(entries):
         print(f"   - {' '.join(e.split())[:110]}")
 
     gem = GeminiSummarizer(load_gemini_key(), settings["gemini"]["model"])
     desc = gem.summarize_batch([(person["name"], entries)]).get(person["name"])
     if not desc:
-        sys.exit("Summarizer returned nothing.")
+        sys.exit("Summarizer returned nothing (quota, rate limit or outage).")
+    desc = scrub_meeting_mentions(desc, compile_patterns(cfg.get("scrub_phrases")), names) or desc
     print(f"\nNEW DESCRIPTION ({len(desc)} chars):\n  {desc}\n")
+    invented = unsupported_terms(desc, entries)
+    if invented:
+        print(
+            f"  !! The AI named {', '.join(invented)}, which appears in NONE of the "
+            f"entries above. Do NOT write this without checking it.\n"
+        )
 
     tab, lay = _tab_and_layout(sheets, settings, args.tab)
     row = _rows_on_tab(sheets, tab, lay).get(key)

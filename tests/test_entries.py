@@ -20,6 +20,7 @@ from execution.entries import (
     people_names,
     scrub_meeting_mentions,
     strip_boilerplate,
+    unsupported_terms,
 )
 
 # The live list, so a change to settings.yaml that breaks these is caught here and
@@ -319,3 +320,69 @@ def test_a_line_with_no_meetings_is_returned_unchanged():
 def test_a_line_that_was_nothing_but_meetings_comes_back_empty():
     """Which makes the caller flag the person rather than bill a cell of meetings."""
     assert scrub_meeting_mentions("Dev Team All Hands, Pvragon Coworking, 1:1 meetings.", SCRUB) == ""
+
+
+# --------------------------------------------------------------------------
+# Work the model invented
+# --------------------------------------------------------------------------
+PABLO = [
+    "Worked in Testing strategy, Shadow tenant, Infra audit tickets. Made several Prs.",
+    "Worked in Staging Prod tenant. Merged two PRs and tested in AWS. Updated open PRs.",
+    "Worked in Staging Prod tenant. Merged two PRs and had a call to prepare dry run.",
+]
+
+
+def test_an_invented_system_name_is_caught():
+    """A real case: ten entries about infra audit tickets were summarised as
+    citing "Storybook test updates", which appears in none of them. This cell
+    goes to a client, so a named system with no time entry behind it has to be
+    stopped on rather than billed."""
+    desc = (
+        "Staging Prod tenant updates, PR merges, and AWS testing, including infra "
+        "audit ticket PRs, Storybook test updates, and Shadow tenant ticket PRs."
+    )
+    assert unsupported_terms(desc, PABLO) == ["Storybook"]
+
+
+def test_the_accurate_version_of_the_same_summary_is_clean():
+    """The guard has to be quiet on the good output, or it gets ignored."""
+    desc = (
+        "Staging Prod tenant work, infra audit ticket PRs, testing strategy PRs, "
+        "Shadow tenant ticket PRs, AWS testing, and PR updates."
+    )
+    assert unsupported_terms(desc, PABLO) == []
+
+
+def test_payers_and_systems_that_are_really_in_the_entries_pass():
+    entries = [
+        "Aetna and Humana breakouts",
+        "IMPORTANT REVIEW: Crisis Classification Rollout",
+        "Humana/RideCare claims discussion",
+        "RideCare Brand Review",
+    ]
+    desc = (
+        "Crisis Classification Rollout review, Humana/RideCare claims discussion, "
+        "Aetna and Humana breakouts, and RideCare Brand Review."
+    )
+    assert unsupported_terms(desc, entries) == []
+
+
+def test_ordinary_capitalised_words_are_not_reported():
+    """Paraphrasing is the model's job. Flagging every capitalised word would
+    bury the one case that matters."""
+    assert unsupported_terms("Billing resubmissions and coverage checks.", ["ops(billing): resubmissions, coverage"]) == []
+    assert unsupported_terms("Daily support calls and ticket triage.", ["support call, triage"]) == []
+
+
+def test_an_acronym_the_entries_never_mention_is_reported():
+    assert unsupported_terms("Audit logging and HIPAA tracking.", ["audit logging work"]) == ["HIPAA"]
+
+
+def test_a_term_is_reported_once_however_often_it_appears():
+    desc = "Storybook tests, Storybook snapshots, and Storybook coverage."
+    assert unsupported_terms(desc, PABLO) == ["Storybook"]
+
+
+def test_nothing_to_check_against_does_not_crash():
+    assert unsupported_terms("", []) == []
+    assert unsupported_terms("Storybook work.", []) == ["Storybook"]

@@ -129,9 +129,13 @@ def build_descriptions(
     log: list[str] | None = None,
     kimai_project: int | None = None,
     project_overrides: dict[int, set[int]] | None = None,
-) -> tuple[dict, dict]:
-    """Returns (descriptions, flags). Flags = {name: reason} for a description we
-    could not write (left empty + review note). One batched Gemini call.
+) -> tuple[dict, dict, dict]:
+    """Returns (descriptions, flags, notes).
+
+    flags = {name: reason} for a description we could not write at all: the cell is
+    left EMPTY with a review note on it.
+    notes = {name: note} for a description that stands but needs a human to check
+    it -- the cell keeps its text and gets the note. One batched Gemini call.
 
     EVERY active person is considered, whatever their hours_source. People billed
     manually used to be skipped entirely, so their project cell simply carried the
@@ -151,7 +155,7 @@ def build_descriptions(
         gem = GeminiSummarizer(load_gemini_key(), settings["gemini"]["model"])
     except RuntimeError as e:
         say(f"  ! Descriptions skipped: {e}")
-        return {}, {}
+        return {}, {}, {}
 
     by_user = kimai.descriptions_by_user(begin, finish, project=kimai_project) if kimai else {}
     # Same override as the hours: their work is under another project name.
@@ -182,6 +186,7 @@ def build_descriptions(
         )
 
     flags: dict[str, str] = {}
+    notes: dict[str, str] = {}
     work: list[tuple[str, list[str]]] = []
     for p in roster:
         if not p.get("active", True):  # off the project -> no description needed
@@ -248,6 +253,15 @@ def build_descriptions(
                 f"  !! {name}: the AI named {', '.join(invented)}, which appears in "
                 f"NONE of their time entries. Check this cell before sending."
             )
+            # A warning in the run log is read by nobody on a scheduled run, and
+            # this is a claim about work being billed. Put it on the cell.
+            notes[name] = (
+                f"⚠ Check before sending: this description names "
+                f"{', '.join(invented)}, which does not appear anywhere in this "
+                f"person's time entries for the period. Either the entry text is "
+                f"missing it or the AI invented it. The rest of the line is "
+                f"usually correct. (Areeba)"
+            )
     missing = [name for name, _entries in work if name not in descriptions]
 
     if missing and gem.unavailable:
@@ -270,7 +284,7 @@ def build_descriptions(
 
     if flags:
         say(f"  ! description flags (left empty + noted): {flags}")
-    return descriptions, flags
+    return descriptions, flags, notes
 
 
 def pull_calendars(
@@ -507,9 +521,10 @@ def prepare(opts) -> InvoiceRun:
 
     descriptions: dict = {}
     desc_flags: dict = {}
+    desc_notes: dict = {}
     if not g("no_descriptions"):
         log.append(f"Descriptions window: {desc_win[0]} -> {desc_win[1]}")
-        descriptions, desc_flags = build_descriptions(
+        descriptions, desc_flags, desc_notes = build_descriptions(
             kimai,
             f"{desc_win[0]}T00:00:00",
             f"{desc_win[1]}T23:59:59",
@@ -532,6 +547,7 @@ def prepare(opts) -> InvoiceRun:
         passthroughs=passthroughs,
         descriptions=descriptions,
         desc_flags=desc_flags,
+        desc_notes=desc_notes,
         allow_duplicate_period=bool(g("allow_duplicate_period")),
     )
     if descriptions:  # fresh per-person cells exist -> refresh the overall paragraph too

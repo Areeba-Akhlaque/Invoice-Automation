@@ -162,6 +162,54 @@ def test_flagged_description_blanks_the_cell_and_leaves_a_note(snapshot):
     assert "AI summary unavailable" in sheets.notes[0][2]
 
 
+def test_a_noted_description_KEEPS_its_text_and_still_gets_the_note(snapshot):
+    """The other kind of note. When the AI names work that is in no time entry,
+    the rest of the line is usually right, so blanking the cell would throw away
+    good text — but a claim about billed work must not sit there unflagged, and a
+    warning in the run log is read by nobody on a scheduled run."""
+    sheets = FakeSheets(["DRC-0065"])
+    plan = _plan(
+        snapshot,
+        desc_notes={"victor cheung": "⚠ Check before sending: names Storybook"},
+        line_items=[
+            LineItem("Victor Cheung", 86.5, 52, "fixed", sheet_rate=52.0,
+                     project_desc="Driver Forms export QA and Storybook tests."),
+        ],
+    )
+    write_plan(sheets, plan)
+    assert sheets.written["C19"] == "Driver Forms export QA and Storybook tests."
+    assert sheets.notes and sheets.notes[0][0] == 19
+    assert "Storybook" in sheets.notes[0][2]
+
+
+def test_a_flag_wins_over_a_note_for_the_same_person(snapshot):
+    """A flag means there was nothing to write at all, so there is no text for a
+    note to be about. Writing both would leave two notes on one cell."""
+    sheets = FakeSheets(["DRC-0065"])
+    plan = _plan(
+        snapshot,
+        desc_flags={"victor cheung": "no Kimai entries in this period"},
+        desc_notes={"victor cheung": "should never be used"},
+        line_items=[LineItem("Victor Cheung", 86.5, 52, "fixed", sheet_rate=52.0,
+                             project_desc="something")],
+    )
+    write_plan(sheets, plan)
+    assert sheets.written["C19"] == ""
+    assert len(sheets.notes) == 1
+    assert "no Kimai entries" in sheets.notes[0][2]
+
+
+def test_a_clean_description_gets_no_note_at_all(snapshot):
+    sheets = FakeSheets(["DRC-0065"])
+    plan = _plan(snapshot, line_items=[
+        LineItem("Victor Cheung", 86.5, 52, "fixed", sheet_rate=52.0,
+                 project_desc="Driver Forms export QA."),
+    ])
+    write_plan(sheets, plan)
+    assert sheets.written["C19"] == "Driver Forms export QA."
+    assert sheets.notes == []
+
+
 def test_hidden_person_row_has_its_hours_cleared(snapshot):
     """Otherwise a hidden leftover row silently inflates the subtotal."""
     snapshot.hidden = {17}

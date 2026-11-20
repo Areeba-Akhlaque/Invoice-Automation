@@ -174,7 +174,7 @@ def redo_all(args, settings, sheets) -> None:
             google_credentials(settings), settings, roster, window, {}, log
         )
 
-    descriptions, flags = build_descriptions(
+    descriptions, flags, cell_notes = build_descriptions(
         kimai,
         f"{window[0]}T00:00:00",
         f"{window[1]}T23:59:59",

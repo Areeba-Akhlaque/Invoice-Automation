@@ -296,6 +296,9 @@ class InvoicePlan:
     carried_passthroughs: dict[str, float] = field(default_factory=dict)  # already on the tab
     warnings: list[str] = field(default_factory=list)
     desc_flags: dict[str, str] = field(default_factory=dict)  # normalized name -> reason
+    # normalized name -> note text, for a cell that KEEPS its description but needs
+    # a human to look at it. desc_flags empties the cell; this does not.
+    desc_notes: dict[str, str] = field(default_factory=dict)
     projects_summary: str | None = None  # "PROJECTS ON THIS INVOICE" paragraph
     retired: list[str] = field(default_factory=list)  # active:false -> clear their row
     snapshot: TemplateSnapshot | None = None
@@ -405,6 +408,7 @@ def build_plan(
     passthroughs: dict[str, float] | None = None,
     descriptions: dict[str, str] | None = None,
     desc_flags: dict[str, str] | None = None,
+    desc_notes: dict[str, str] | None = None,
     allow_duplicate_period: bool = False,
 ) -> InvoicePlan:
     settings = load_settings()
@@ -457,6 +461,7 @@ def build_plan(
         cap=cap,
         passthroughs=passthroughs or {},
         desc_flags={_normalize_name(k): v for k, v in (desc_flags or {}).items()},
+        desc_notes={_normalize_name(k): v for k, v in (desc_notes or {}).items()},
         snapshot=snap,
         layout=lay,
     )
@@ -633,9 +638,16 @@ def _fill_new_tab(sheets, plan: InvoicePlan, new_tab: str, lay: dict) -> str:
         key = _normalize_name(li.name)
         if key in plan.desc_flags:
             updates.append((_col_row(lay["project_col"], row), ""))  # leave empty, flag below
-            note_targets.append((row, plan.desc_flags[key]))
+            note_targets.append((
+                row,
+                f"⚠ No description written: {plan.desc_flags[key]}. Please review and "
+                f"fill this cell manually. (Areeba)",
+            ))
         elif li.project_desc:
             updates.append((_col_row(lay["project_col"], row), li.project_desc))
+            # The description stands, but something about it needs a human eye.
+            if key in plan.desc_notes:
+                note_targets.append((row, plan.desc_notes[key]))
 
     for name, amount in plan.passthroughs.items():
         row = name_to_row.get(_normalize_name(name))
@@ -688,11 +700,6 @@ def _fill_new_tab(sheets, plan: InvoicePlan, new_tab: str, lay: dict) -> str:
     sheets.set_rows_hidden(new_tab, row_vis)
     sheets.batch_update_cells(updates, new_tab)
 
-    for row, reason in note_targets:
-        sheets.set_cell_note(
-            new_tab,
-            row,
-            lay["project_col"],
-            f"⚠ No description written: {reason}. Please review and fill this cell manually. (Areeba)",
-        )
+    for row, note in note_targets:
+        sheets.set_cell_note(new_tab, row, lay["project_col"], note)
     return new_tab

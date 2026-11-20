@@ -43,6 +43,11 @@ House style for EACH description (do not deviate):
     GOOD: "Billing classification QA, ..."
   Say nothing at all about attending meetings. Likewise ignore holidays, PTO and
   any other time off.
+- WHEN MANY ENTRIES SHARE THE SAME OPENING, the distinct work is in what comes
+  AFTER it. Build the line from those differences — the repeated opening is one
+  item, not the whole answer. Someone logging "Worked in X, Y, Z." every day with
+  a different sentence after it did a different thing each day, and collapsing it
+  back to "X, Y and Z" throws away everything they actually reported.
 - Never invent work. If the entries are genuinely thin, a shorter line is correct.
 
 Style example: "Driver onboarding flow, background-check webhooks, and dispatch

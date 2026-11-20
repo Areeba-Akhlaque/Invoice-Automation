@@ -162,7 +162,10 @@ def _run_build_descriptions(monkeypatch, summarizer, entries):
         {"name": "A", "_key": "a", "active": True, "hours_source": "calendar"},
         {"name": "B", "_key": "b", "active": True, "hours_source": "calendar"},
     ])
-    return orch.build_descriptions(None, "x", "y", {}, entries, [])
+    # These tests are about flags, not the "needs checking" notes, so the helper
+    # drops the third value rather than every caller spelling it out.
+    descriptions, flags, _notes = orch.build_descriptions(None, "x", "y", {}, entries, [])
+    return descriptions, flags
 
 
 def test_a_total_summarizer_outage_leaves_the_carried_text_alone(monkeypatch):
@@ -270,7 +273,7 @@ def test_carry_description_leaves_the_cell_alone_without_flagging(monkeypatch):
         {"name": "Bradd", "_key": "bradd", "active": True, "hours_source": "manual",
          "kimai_user_id": 4, "carry_description": True},
     ])
-    descriptions, flags = orch.build_descriptions(None, "x", "y", {}, {"a": ["Echo1 Lead Sync"]}, [])
+    descriptions, flags, _n = orch.build_descriptions(None, "x", "y", {}, {"a": ["Echo1 Lead Sync"]}, [])
     assert "A" in descriptions
     assert "Bradd" not in descriptions  # nothing written -> cell keeps its text
     assert flags == {}                  # and no review note
@@ -287,7 +290,7 @@ def test_without_carry_description_a_sourceless_person_is_still_flagged(monkeypa
         {"name": "A", "_key": "a", "active": True, "hours_source": "calendar"},
         {"name": "Nobody", "_key": "nobody", "active": True, "hours_source": "manual"},
     ])
-    _d, flags = orch.build_descriptions(None, "x", "y", {}, {"a": ["Echo1 Lead Sync"]}, [])
+    _d, flags, _n = orch.build_descriptions(None, "x", "y", {}, {"a": ["Echo1 Lead Sync"]}, [])
     assert "no time-tracking source" in flags["Nobody"]
 
 

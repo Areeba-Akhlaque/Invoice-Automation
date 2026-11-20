@@ -24,6 +24,15 @@ layer is data that both read).
 - Writes one description per person from their time entries, covering the period
   that was actually worked. The invoice is raised in advance, so a tab for 16-30
   Nov bills — and describes — the hours from 1-15 Nov.
+- Strips recurring meetings out of that text first. "Dev Team All Hands",
+  "Pvragon Coworking" and "Roman : Jaime 1:1" are identical every fortnight and
+  say nothing about what was built, so they are dropped before summarising — and
+  the rule is enforced again on the finished line, because a meeting named inside
+  a prose entry is invisible to a per-segment filter. A meeting that names a
+  subject ("IMPORTANT REVIEW: Crisis Classification Rollout") is work and stays,
+  with the attendees' names removed. Configured in `directive/settings.yaml`
+  under `descriptions`. Anyone whose whole period was meetings is then flagged and
+  left for review with a cell note, rather than described with a list of meetings.
 - Duplicates the latest invoice tab and fills only the variable cells, so the
   sheet's own rate/formula logic is preserved.
 - Carries the agreed contract amount forward from the previous invoice and fills

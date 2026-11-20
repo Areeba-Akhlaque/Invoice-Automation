@@ -35,6 +35,14 @@ House style for EACH description (do not deviate):
   work on". Every word must carry a deliverable. Compare:
     BAD : "Development and QA work, including Driver Forms export, ..."
     GOOD: "Driver Forms export and QA, ..."
+- NEVER NAME A MEETING. "Dev Team All Hands", "Pvragon Coworking", "1:1", a
+  standup, a sync, a weekly, an office hour, or two people's names, are not
+  deliverables — they repeat every period and tell the reader nothing. Name the
+  SUBJECT instead, and only when the entry gives one:
+    BAD : "Dev Team All Hands, Pvragon Coworking, 1:1 meetings, billing QA, ..."
+    GOOD: "Billing classification QA, ..."
+  Say nothing at all about attending meetings. Likewise ignore holidays, PTO and
+  any other time off.
 - Never invent work. If the entries are genuinely thin, a shorter line is correct.
 
 Style example: "Driver onboarding flow, background-check webhooks, and dispatch

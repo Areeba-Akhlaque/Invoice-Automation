@@ -23,6 +23,70 @@ invoice:
 # advance (issue = period start + 7). The draft is generated a few days ahead so
 # there is time to review before the issue date; the issue date itself is computed
 # from the period, so moving these days does not move it.
+# Project descriptions. A recurring meeting is not a deliverable: the names repeat
+# every fortnight, so listing them makes two invoices look alike and tells the
+# client nothing. Segments matching these are removed from the time-entry text
+# BEFORE it is summarised and before the missing/repetitive check runs — so
+# someone whose whole period was meetings is flagged for review (with a cell note)
+# instead of being described with a plausible-looking list of meeting names.
+#
+# Matched with fullmatch against one segment of an entry, case-insensitively, after
+# whitespace/bullets/trailing punctuation are stripped. Entries are split on ";",
+# "|" and ". - " first. Name-pair meetings ("Roman : Jaime", "Victor / Roman") are
+# recognised by shape and need no pattern here.
+#
+# Keep this list to things that are ONLY a meeting. Anything naming a subject
+# ("IMPORTANT REVIEW: Crisis Classification Rollout", "Aetna and Humana breakouts")
+# is real work and must stay.
+descriptions:
+  drop_segments:
+    - '(dev team )?all[ -]?hands( call)?'
+    - '(pvragon )?co[ -]?working'
+    - '(pvragon )?team building'
+    - 'jaime tb'
+    - 'billing team (sync|weekly)'
+    - 'support review'
+    - '(echo ?1 )?office hours?'
+    - 'echo ?1 (data )?team sync'
+    - 'ride care ops ([+&]|and) data leads'
+    - 'strategy\s*-\s*pvragon'
+    - 'crisis( classification)? (session|call)'
+    - 'crisis changes session'
+    - 'driver trip log review and planning'
+    - 'review'                                  # Saymond logs a bare "Review."
+    - '1:1( with .+| meetings?)?'
+    - '.*opportunities\s*(&|and)\s*career'
+    # Time off is not billable work and must not be described as if it were.
+    # "comp\w+ holiday" rather than "company holiday": it is typed by hand and
+    # has come through as "Compnay Holiday".
+    - '(paid off day|comp\w+ holiday|holiday|pto|day off|vacation|sick)\b.*'
+
+  # People who turn up in entry text but are not billed on this invoice. Roster
+  # names are picked up automatically; these are the rest. A leading run of names
+  # is stripped from an entry so "JP:Bradd Crisis Review" reads as "Crisis Review"
+  # — the subject is the billable thing, not who attended. Only COLLEAGUES belong
+  # here: a client's name ("Harris", "Saif") is part of the work.
+  people: ["Jaime", "Vic", "Macie", "Trever", "Toni", "Maranda", "Cherry", "Areeba"]
+
+  # Applied to the FINISHED description, not to the entries. A meeting named inside
+  # a prose entry ("Daily support call and team meetings. Ticket scoping...") is one
+  # segment, so segment filtering cannot reach it, and the model writes it into the
+  # cell however firmly the prompt says not to. These phrases are cut from the
+  # generated line and the item is dropped if nothing is left of it.
+  scrub_phrases:
+    - '\b(and|with)?\s*(the\s+)?team meetings?\b'
+    - '\b(and|with)?\s*(the\s+)?all[ -]?hands( call| meeting)?s?\b'
+    - '\becho ?1 office hours?\b'
+    - '\boffice hours?\b'
+    # The company prefix goes WITH the label: scrubbing only "coworking" left a
+    # bare "Pvragon" sitting in the cell as though it were a deliverable.
+    - '\b(pvragon )?co[ -]?working\b'
+    - '\b(pvragon )?team building\b'
+    - '\b1:1s?\b'
+    - '\bstand[ -]?ups?\b'
+    - '\bdaily (sync|huddle)\b'
+    - '\bdev team\b'
+
 schedule:
   # The day BEFORE each review (reviews are on the 5th and the 20th), so the draft
   # is already there to be reviewed. Keep in step with the cron in

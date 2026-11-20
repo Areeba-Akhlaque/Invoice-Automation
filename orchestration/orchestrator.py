@@ -17,6 +17,12 @@ from execution.config import (
     load_roster,
     load_settings,
 )
+from execution.entries import (
+    clean_entries,
+    compile_patterns,
+    people_names,
+    scrub_meeting_mentions,
+)
 from execution.gcal import CalendarClient
 from execution.invoice import InvoicePlan, build_plan, write_plan
 from execution.kimai import KimaiClient
@@ -136,8 +142,12 @@ def build_descriptions(
     -- used when someone's default window holds nothing useful (e.g. all PTO).
     """
     say = log.append if log is not None else print
+    settings = load_settings()
+    desc_cfg = settings.get("descriptions") or {}
+    drop_patterns = compile_patterns(desc_cfg.get("drop_segments"))
+    scrub_patterns = compile_patterns(desc_cfg.get("scrub_phrases"))
     try:
-        gem = GeminiSummarizer(load_gemini_key(), load_settings()["gemini"]["model"])
+        gem = GeminiSummarizer(load_gemini_key(), settings["gemini"]["model"])
     except RuntimeError as e:
         say(f"  ! Descriptions skipped: {e}")
         return {}, {}
@@ -150,6 +160,7 @@ def build_descriptions(
             by_user[uid] = own.get(uid) or []
 
     roster = load_roster()
+    names = people_names(roster, desc_cfg.get("people"))
     for key, (w_start, w_end) in (desc_windows or {}).items():
         person = next((p for p in roster if p["_key"] == key), None)
         if person is None:
@@ -187,15 +198,43 @@ def build_descriptions(
         else:
             flags[p["name"]] = "no time-tracking source configured in roster.yaml"
             continue
+
+        # Strip recurring meetings BEFORE the checks below, so a period that was
+        # only meetings reads as having nothing to describe. Done the other way
+        # round, such a person passed the checks and got a project cell listing
+        # the same meeting names as the previous invoice.
+        had = len(entries)
+        entries, dropped = clean_entries(entries, drop_patterns, names)
+        if dropped:
+            say(
+                f"  {p['name']}: {dropped} of {had} {source} entries were recurring "
+                f"meetings or time off — dropped before summarising"
+            )
+
         uniq = {" ".join(e.split()).strip().lower() for e in entries if e.strip()}
         if not uniq:
-            flags[p["name"]] = f"no {source} entries in this period"
+            flags[p["name"]] = (
+                f"no {source} entries in this period"
+                if not had
+                else f"all {had} {source} entries were recurring meetings or time off"
+            )
         elif len(entries) >= 2 and len(uniq) == 1:
             flags[p["name"]] = "repetitive (same entry all period)"
         else:
             work.append((p["name"], entries))
 
     descriptions = gem.summarize_batch(work)
+    # The model names meetings anyway, and a prose entry hides them from the
+    # segment filter, so the rule is enforced once more on the finished line.
+    for name, text in list(descriptions.items()):
+        scrubbed = scrub_meeting_mentions(text, scrub_patterns, names)
+        if scrubbed != text:
+            say(f"  {name}: meeting mentions removed from the generated description")
+        if scrubbed:
+            descriptions[name] = scrubbed
+        else:
+            del descriptions[name]
+            flags[name] = "generated description was only meetings"
     missing = [name for name, _entries in work if name not in descriptions]
 
     if missing and gem.unavailable:

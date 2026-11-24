@@ -26,8 +26,10 @@ laborers:
     calendar_project: "Ride Care"
     kimai_user_id: 3         # "Jaime" - kept, but he does not track there
 
+  # Raised to 87 in cfg_laborers. His row applies NO markup, so 87 is what he
+  # bills; recorded here so the rate check stops reporting a difference.
   - name: "Roman Naidenko"
-    base_rate: 58
+    base_rate: 87
     markup: 1.0
     hours_source: fixed
     kimai_user_id: 9
@@ -61,8 +63,9 @@ laborers:
     kimai_user_id: 30
     active: false
 
+  # Raised to 36 in cfg_laborers; his row applies x1.2, so he bills $43.20.
   - name: "Alexander Pavelko"
-    base_rate: 30
+    base_rate: 36
     markup: 1.2
     hours_source: kimai
     kimai_user_id: 29        # alias "Alex"
@@ -77,14 +80,19 @@ laborers:
     kimai_user_id: 35        # Kimai username "Dana Hettè"
     kimai_projects: ["Pvragon", "Ride Care"]
 
+  # 49 is the COST rate. His row's formula multiplies by 1.2, so the sheet bills
+  # $58.80 — the figure Cherry actually sends. Putting 58.80 here (and in
+  # cfg_laborers) applied the markup twice and billed $70.56; see the note at the
+  # top of this file.
   - name: "JP Casabianca"
-    base_rate: 58.8        # raised 2026-11; 58.8 * 1.2 = 70.56 on the sheet
+    base_rate: 49
     markup: 1.2
     hours_source: fixed
     kimai_user_id: 36        # "Juan Pablo"
 
+  # 44 is the COST rate; x1.2 on the sheet gives the $52.80 Cherry sends.
   - name: "Rafael Casabianca"
-    base_rate: 52.8        # raised 2026-11; 52.8 * 1.2 = 63.36 on the sheet
+    base_rate: 44
     markup: 1.2
     hours_source: fixed
     kimai_user_id: 37
